@@ -18,6 +18,7 @@ from aphrodite.modules.acp_relay import (  # noqa: E402
     TurnResult,
     acp_transport,
     configure_relay,
+    handle,
     readiness,
     reset_relay,
 )
@@ -288,6 +289,98 @@ def test_transport_error_propagates(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# Synchronous dispatch surface (read-only; turns stay HTTP-only)
+# --------------------------------------------------------------------------- #
+
+
+def test_dispatch_list_empty_conversations(tmp_path):
+    relay = _relay(tmp_path)
+    configure_relay(relay)
+    try:
+        result = handle("list", [], {})
+        assert result == {"ok": True, "action": "list", "conversations": []}
+    finally:
+        reset_relay()
+
+
+def test_dispatch_list_populated_conversations_orders_by_recent_update(tmp_path):
+    fake = FakeTransport()
+    relay = _relay(tmp_path, fake)
+    configure_relay(relay)
+    try:
+        first = relay.create_conversation(title="first")
+        second = relay.create_conversation(title="second")
+        asyncio.run(relay.turn(first["id"], "bump first"))
+
+        result = handle("list", [], {})
+
+        assert result["ok"] is True
+        assert [c["id"] for c in result["conversations"]] == [first["id"], second["id"]]
+        assert result["conversations"][0]["turns"] == 1
+        assert fake.calls[0]["message"] == "bump first"
+    finally:
+        reset_relay()
+
+
+def test_dispatch_get_conversation_returns_messages(tmp_path):
+    relay = _relay(tmp_path)
+    configure_relay(relay)
+    try:
+        convo = relay.create_conversation(title="read me")
+        asyncio.run(relay.turn(convo["id"], "hello"))
+
+        result = handle("get", [convo["id"]], {})
+
+        assert result["ok"] is True
+        assert result["conversation"]["id"] == convo["id"]
+        assert result["conversation"]["title"] == "read me"
+        assert [m["role"] for m in result["conversation"]["messages"]] == ["user", "agent"]
+    finally:
+        reset_relay()
+
+
+def test_dispatch_get_rejects_missing_conversation_id(tmp_path):
+    relay = _relay(tmp_path)
+    configure_relay(relay)
+    try:
+        for payload in ([], ["   "]):
+            result = handle("get", payload, {})
+            assert result["ok"] is False
+            assert result["error_type"] == "invalid_argument"
+            assert "conversation id" in result["error"]
+    finally:
+        reset_relay()
+
+
+def test_dispatch_get_unknown_conversation_id_returns_not_found(tmp_path):
+    relay = _relay(tmp_path)
+    configure_relay(relay)
+    try:
+        result = handle("get", ["missing"], {})
+        assert result["ok"] is False
+        assert result["conversation_id"] == "missing"
+        assert result["error_type"] == "not_found"
+    finally:
+        reset_relay()
+
+
+def test_dispatch_unsupported_action_points_to_http_routes_without_turning(tmp_path):
+    fake = FakeTransport()
+    relay = _relay(tmp_path, fake)
+    configure_relay(relay)
+    try:
+        result = handle("turn", ["ignored", "hello"], {})
+        assert result["ok"] is False
+        assert result["handled"] is False
+        assert result["system"] == "acp_relay"
+        assert result["error_type"] == "unsupported_action"
+        assert result["routes"]["turns"] == "/acp/conversations/{id}/turns"
+        assert fake.calls == []
+    finally:
+        reset_relay()
+
+
+# --------------------------------------------------------------------------- #
 # HTTP route wiring (FastAPI TestClient against the real app factory)
 # --------------------------------------------------------------------------- #
 
@@ -379,16 +472,31 @@ def test_http_transport_error_maps_to_502(tmp_path):
         reset_relay()
 
 
-def test_build_router_registers_acp_relay():
+def test_build_router_registers_acp_relay_and_dispatches_read_only_actions(tmp_path):
     from aphrodite.app import build_router
 
-    router = build_router()
-    assert "acp_relay" in router.systems
-    result = router.dispatch("acp_relay:v1:health", context={"source": "test"})
-    assert result["ok"] is True
-    readiness = result["result"]["readiness"]
-    assert readiness["profile"]
-    assert "model_choice" in readiness
+    relay = _relay(tmp_path)
+    convo = relay.create_conversation(title="via router")
+    configure_relay(relay)
+    try:
+        router = build_router()
+        assert "acp_relay" in router.systems
+
+        health = router.dispatch("acp_relay:v1:health", context={"source": "test"})
+        assert health["ok"] is True
+        readiness = health["result"]["readiness"]
+        assert readiness["profile"]
+        assert "model_choice" in readiness
+
+        listed = router.dispatch("acp_relay:v1:list", context={"source": "test"})
+        assert listed["ok"] is True
+        assert [c["id"] for c in listed["result"]["conversations"]] == [convo["id"]]
+
+        fetched = router.dispatch(f"acp_relay:v1:get:{convo['id']}", context={"source": "test"})
+        assert fetched["ok"] is True
+        assert fetched["result"]["conversation"]["id"] == convo["id"]
+    finally:
+        reset_relay()
 
 
 # --------------------------------------------------------------------------- #

@@ -556,12 +556,39 @@ def readiness() -> dict[str, Any]:
 def handle(action: str, payload: list[str], context: dict[str, Any]) -> dict[str, Any]:
     if action in {"health", "readiness", "status"}:
         return {"ok": True, "action": action, "readiness": readiness()}
+    if action == "list":
+        return {"ok": True, "action": action, "conversations": get_relay().list_conversations()}
+    if action == "get":
+        conversation_id = payload[0].strip() if payload else ""
+        if not conversation_id:
+            return {
+                "ok": False,
+                "action": action,
+                "error_type": "invalid_argument",
+                "error": "conversation id is required",
+            }
+        convo = get_relay().get_conversation(conversation_id)
+        if convo is None:
+            return {
+                "ok": False,
+                "action": action,
+                "conversation_id": conversation_id,
+                "error_type": "not_found",
+                "error": "conversation not found",
+            }
+        return {"ok": True, "action": action, "conversation": convo}
     return {
+        "ok": False,
         "handled": False,
         "system": "acp_relay",
         "action": action,
         "payload": payload,
-        "message": "acp_relay dispatch supports only health/readiness; use the /acp HTTP routes",
+        "error_type": "unsupported_action",
+        "error": "action is only available through the /acp HTTP routes",
+        "routes": {
+            "conversations": "/acp/conversations",
+            "turns": "/acp/conversations/{id}/turns",
+        },
     }
 
 

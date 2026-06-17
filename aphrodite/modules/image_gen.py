@@ -299,5 +299,25 @@ def generate_image(payload: dict[str, Any], *, client: Any | None = None) -> dic
 
 def handle(action: str, payload: list[str], context: dict[str, Any]) -> dict[str, Any]:
     if action == "status":
-        return {"handled": True, "module": "image_gen", "provider": "aphrodite-openai-codex"}
+        return {
+            "handled": True,
+            "module": "image_gen",
+            "provider": "aphrodite-openai-codex",
+            "default_model": DEFAULT_MODEL,
+        }
+    if action == "models":
+        return {
+            "handled": True,
+            "module": "image_gen",
+            "provider": "aphrodite-openai-codex",
+            "models": list(MODELS),
+            "default_model": DEFAULT_MODEL,
+        }
+    if action in {"sizes", "aspect_ratios"}:
+        return {
+            "handled": True,
+            "module": "image_gen",
+            "sizes": list(SIZES),
+            "aspect_ratios": list(SIZES),
+        }
     return {"handled": False, "module": "image_gen", "action": action, "message": "use POST /image/generate"}

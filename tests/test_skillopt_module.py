@@ -248,3 +248,99 @@ def test_skillopt_v3_eval_rejects_regression_and_forbidden_policy(monkeypatch, t
     assert rejected["gate_pass"] is False
     assert rejected["must_not_regress_failed"] == ["legacy-url-repair"]
     assert rejected["forbidden_policy_hits"][0]["code"] == "silent_skill_mutation"
+
+
+def test_skillopt_dispatch_exposes_read_only_run_and_eval_actions(monkeypatch, tmp_path):
+    data_root = tmp_path / "skillopt-data"
+    monkeypatch.setenv("APHRODITE_SKILLOPT_DATA_ROOT", str(data_root))
+    created = skillopt.create_run(
+        {"run_id": "skillopt-dispatch-run", "skill_name": "dispatch-skill", "best_skill_md": BEST_SKILL}
+    )
+    created_eval = skillopt.create_eval({"eval_id": "dispatch-eval", "min_delta": 0.2})
+    assert created["ok"] is True
+    assert created_eval["ok"] is True
+
+    client = TestClient(create_app())
+    status = client.post("/dispatch/skillopt:v1:status").json()["result"]
+    assert status["ok"] is True
+    assert status["count"] == 1
+    assert status["eval_count"] == 1
+    assert status["runs"][0]["run_id"] == "skillopt-dispatch-run"
+    assert status["evals"][0]["eval_id"] == "dispatch-eval"
+
+    listed_runs = client.post("/dispatch/skillopt:v1:list_runs").json()["result"]
+    assert listed_runs == skillopt.list_runs()
+    fetched_run = client.post("/dispatch/skillopt:v1:get_run:skillopt-dispatch-run").json()["result"]
+    assert fetched_run == skillopt.get_run("skillopt-dispatch-run")
+    listed_evals = client.post("/dispatch/skillopt:v1:list_evals").json()["result"]
+    assert listed_evals == skillopt.list_evals()
+    fetched_eval = client.post("/dispatch/skillopt:v1:get_eval:dispatch-eval").json()["result"]
+    assert fetched_eval == skillopt.get_eval("dispatch-eval")
+
+
+def test_skillopt_dispatch_validation_rejects_malformed_and_path_ids(monkeypatch, tmp_path):
+    monkeypatch.setenv("APHRODITE_SKILLOPT_DATA_ROOT", str(tmp_path / "data"))
+    client = TestClient(create_app())
+
+    bad_run = skillopt.handle("get_run", ["../outside"], {}) 
+    assert bad_run["ok"] is False
+    assert bad_run["error_type"] == "invalid_argument"
+    assert "not a path" in bad_run["error"]
+
+    malformed_run = client.post("/dispatch/skillopt:v1:get_run:bad!id").json()["result"]
+    assert malformed_run["ok"] is False
+    assert malformed_run["error_type"] == "invalid_argument"
+    assert "run_id" in malformed_run["error"]
+
+    bad_eval = skillopt.handle("get_eval", ["../outside"], {})
+    assert bad_eval["ok"] is False
+    assert bad_eval["error_type"] == "invalid_argument"
+    assert "not a path" in bad_eval["error"]
+
+    malformed_eval = client.post("/dispatch/skillopt:v1:get_eval:bad!id").json()["result"]
+    assert malformed_eval["ok"] is False
+    assert malformed_eval["error_type"] == "invalid_argument"
+    assert "eval_id" in malformed_eval["error"]
+
+
+def test_skillopt_create_and_train_error_envelopes_are_consistent(monkeypatch, tmp_path):
+    monkeypatch.setenv("APHRODITE_SKILLOPT_DATA_ROOT", str(tmp_path / "data"))
+
+    created = skillopt.create_run({"run_id": "../escape", "skill_name": "safe-skill"})
+    assert created["ok"] is False
+    assert created["error_type"] == "invalid_argument"
+    assert "not a path" in created["error"]
+    assert not (tmp_path / "data" / "runs").exists()
+
+    trained = skillopt.train_run({"run_id": "bad!id", "skill_name": "safe-skill"})
+    assert trained["ok"] is False
+    assert trained["error_type"] == "invalid_argument"
+    assert "run_id" in trained["error"]
+
+    eval_result = skillopt.create_eval({"eval_id": "../escape"})
+    assert eval_result["ok"] is False
+    assert eval_result["error_type"] == "invalid_argument"
+    assert "not a path" in eval_result["error"]
+
+    evaluated = skillopt.evaluate_run("../escape", {"baseline_score": 0.1, "candidate_score": 0.2})
+    assert evaluated["ok"] is False
+    assert evaluated["error_type"] == "invalid_argument"
+    assert "not a path" in evaluated["error"]
+
+
+def test_skillopt_file_validation_rejects_path_traversal_filename(monkeypatch, tmp_path):
+    data_root = tmp_path / "skillopt-data"
+    monkeypatch.setenv("APHRODITE_SKILLOPT_DATA_ROOT", str(data_root))
+    created = skillopt.create_run(
+        {"run_id": "skillopt-file-safe", "skill_name": "file-safe", "best_skill_md": BEST_SKILL}
+    )
+    assert created["ok"] is True
+
+    rejected = skillopt.get_file("skillopt-file-safe", "../status.json")
+    assert rejected["ok"] is False
+    assert rejected["error_type"] == "invalid_argument"
+    assert "not a path" in rejected["error"]
+
+    accepted = skillopt.get_file("skillopt-file-safe", "status.json")
+    assert accepted["ok"] is True
+    assert accepted["filename"] == "status.json"
