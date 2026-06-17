@@ -227,15 +227,20 @@ def _write_cache(cache: dict[str, Any]) -> None:
 def _cache_is_fresh(cache: dict[str, Any] | None) -> bool:
     if not cache:
         return False
+    cached_at = cache.get("cached_at_epoch")
+    if cached_at is None:
+        try:
+            cached_at = datetime.fromisoformat(str(cache.get("cached_at")).replace("Z", "+00:00")).timestamp()
+        except Exception:
+            return False
     try:
-        cached_at = float(cache.get("cached_at_epoch") or 0)
+        return time.time() - float(cached_at) < _CACHE_TTL_SECONDS
     except Exception:
         return False
-    return time.time() - cached_at < _CACHE_TTL_SECONDS
 
 
 def _nudge_payload(cache: dict[str, Any] | None, reason: str | None) -> dict[str, Any]:
-    latest_value = cache.get("latest") if cache else None
+    latest_value = cache.get("latest") or cache.get("latest_version") if cache else None
     latest = str(latest_value) if latest_value is not None else None
     cached_at_value = cache.get("cached_at") if cache else None
     cached_at = str(cached_at_value) if cached_at_value is not None else None
