@@ -21,17 +21,21 @@ and drives the ACP handshake.
 from __future__ import annotations
 
 import asyncio
+import hmac
+import json
 import os
 import shutil
 import sqlite3
+import threading
 import time
 import uuid
+import weakref
 from contextlib import closing
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 
 from ..paths import hermes_root
 
@@ -45,6 +49,9 @@ DEFAULT_PROVIDER = ""
 DEFAULT_TURN_TIMEOUT = 240.0
 DEFAULT_PROTOCOL_VERSION = 1
 
+LIST_DEFAULT_LIMIT = 50
+LIST_MAX_LIMIT = 200
+
 
 def _env(name: str, default: str) -> str:
     raw = os.environ.get(name)
@@ -52,6 +59,13 @@ def _env(name: str, default: str) -> str:
         return default
     raw = raw.strip()
     return raw or default
+
+
+def _flag(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _resolve_hermes_bin() -> str:
@@ -171,10 +185,17 @@ async def acp_transport(
     except Exception as exc:  # pragma: no cover - environment guard
         raise AcpTransportError(f"acp client library unavailable: {exc!r}") from exc
 
+    auto_approve = _flag("APHRODITE_ACP_AUTO_APPROVE", True)
+    accept_hooks = _flag("APHRODITE_ACP_ACCEPT_HOOKS", True)
+
     reply_chunks: list[str] = []
     thought_chunks: list[str] = []
 
     def _text_of(update: Any) -> Optional[str]:
+        # TEXT-ONLY policy: only assistant text is surfaced. Non-text content
+        # blocks (image/audio/resource) have no ``.text`` attribute, so this
+        # returns None and they are ignored by design; thoughts are captured
+        # separately in ``session_update``.
         content = getattr(update, "content", None)
         return getattr(content, "text", None)
 
@@ -189,6 +210,9 @@ async def acp_transport(
             self._agent = _agent
 
         async def request_permission(self, options, session_id, tool_call, **_kwargs):
+            if not auto_approve:
+                # Approvals gated off: refuse instead of auto-allowing.
+                return RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
             chosen = None
             for kind in ("allow_always", "allow_once"):
                 for opt in options:
@@ -206,6 +230,9 @@ async def acp_transport(
             )
 
         async def session_update(self, session_id, update, **_kwargs):
+            # Intentionally TEXT-ONLY: assistant message text accumulates into
+            # the reply, agent thoughts are captured separately, and all other
+            # update kinds (tool calls, plans, non-text content) are ignored.
             if isinstance(update, AgentMessageChunk):
                 text = _text_of(update)
                 if text:
@@ -232,9 +259,13 @@ async def acp_transport(
 
     binary, args = config.command()
     env = dict(os.environ)
-    # Non-interactive: never block waiting on approvals/hooks.
-    env.setdefault("HERMES_YOLO_MODE", "1")
-    env.setdefault("HERMES_ACCEPT_HOOKS", "1")
+    # Non-interactive by default: avoid blocking on approvals/hooks. Both gates
+    # default ON (keeps the verified forge flow working); set the corresponding
+    # env var to 0 to opt out.
+    if auto_approve:
+        env.setdefault("HERMES_YOLO_MODE", "1")
+    if accept_hooks:
+        env.setdefault("HERMES_ACCEPT_HOOKS", "1")
 
     async def _drive() -> TurnResult:
         async with acp.spawn_agent_process(
@@ -253,9 +284,20 @@ async def acp_transport(
                 session_id = new.session_id
                 session_models = getattr(new, "models", None)
             else:
-                session_id = acp_session_id
-                loaded = await conn.load_session(cwd=config.cwd, session_id=session_id)
-                session_models = getattr(loaded, "models", None)
+                try:
+                    loaded = await conn.load_session(
+                        cwd=config.cwd, session_id=acp_session_id
+                    )
+                    session_id = acp_session_id
+                    session_models = getattr(loaded, "models", None)
+                except Exception:
+                    # Stale/lost upstream session: self-heal by starting fresh.
+                    # Prior upstream context is lost (acceptable); the new id is
+                    # persisted by record_turn so the conversation recovers. If
+                    # new_session also fails, let it propagate (wrapped below).
+                    new = await conn.new_session(cwd=config.cwd)
+                    session_id = new.session_id
+                    session_models = getattr(new, "models", None)
             # Resolve the engine: an explicit relay override (provider+model)
             # wins; otherwise use the profile's own current model. Some engines
             # (e.g. openai-codex) reject an empty model, and the ACP session does
@@ -283,9 +325,15 @@ async def acp_transport(
     try:
         return await asyncio.wait_for(_drive(), timeout=config.turn_timeout)
     except asyncio.TimeoutError as exc:
-        raise AcpTransportError(
-            f"ACP turn timed out after {config.turn_timeout}s"
-        ) from exc
+        raise AcpTransportError(f"ACP turn timed out after {config.turn_timeout}s") from exc
+    except asyncio.CancelledError:
+        # Propagate cancellation so the SDK's async context manager tears down
+        # the subprocess on HTTP-client disconnect.
+        raise
+    except AcpTransportError:
+        raise
+    except Exception as exc:
+        raise AcpTransportError(f"ACP turn failed: {exc!r}") from exc
 
 
 # --------------------------------------------------------------------------- #
@@ -314,6 +362,13 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at REAL NOT NULL,
     PRIMARY KEY (conversation_id, idx)
 );
+CREATE TABLE IF NOT EXISTS turn_idempotency (
+    conversation_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    response TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    PRIMARY KEY (conversation_id, key)
+);
 """
 
 
@@ -322,53 +377,69 @@ class ConversationStore:
         self.db_path = db_path
         if db_path != ":memory:":
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        # A single shared connection keeps an in-memory DB alive for tests and is
-        # safe here because the relay serializes writes per conversation and the
-        # service runs as a single uvicorn process.
+        # A single shared connection keeps an in-memory DB alive for tests; it is
+        # safe under concurrency because ``self._db_lock`` serializes every
+        # access to the connection across the FastAPI threadpool and the loop.
+        self._db_lock = threading.RLock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        if db_path != ":memory:":
+            # WAL + a busy timeout make a file DB robust under concurrent
+            # readers/writers; neither is meaningful for an in-memory DB.
+            self._conn.execute("PRAGMA journal_mode=WAL;")
+            self._conn.execute("PRAGMA busy_timeout=5000;")
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
 
     def close(self) -> None:
-        self._conn.close()
+        with self._db_lock:
+            self._conn.close()
 
     def create(self, *, profile: str, model: str, provider: str, cwd: str, title: str | None) -> dict[str, Any]:
-        cid = uuid.uuid4().hex
-        now = time.time()
-        self._conn.execute(
-            "INSERT INTO conversations (id, title, profile, model, provider, cwd, acp_session_id, turns, created_at, updated_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (cid, title, profile, model, provider, cwd, None, 0, now, now),
-        )
-        self._conn.commit()
-        return self.get(cid)  # type: ignore[return-value]
+        with self._db_lock:
+            cid = uuid.uuid4().hex
+            now = time.time()
+            self._conn.execute(
+                "INSERT INTO conversations (id, title, profile, model, provider, cwd, acp_session_id, turns, created_at, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (cid, title, profile, model, provider, cwd, None, 0, now, now),
+            )
+            self._conn.commit()
+            return self.get(cid)  # type: ignore[return-value]
 
     def get(self, conversation_id: str) -> Optional[dict[str, Any]]:
-        row = self._conn.execute(
-            "SELECT * FROM conversations WHERE id = ?", (conversation_id,)
-        ).fetchone()
-        return dict(row) if row else None
+        with self._db_lock:
+            row = self._conn.execute(
+                "SELECT * FROM conversations WHERE id = ?", (conversation_id,)
+            ).fetchone()
+            return dict(row) if row else None
 
-    def list(self) -> list[dict[str, Any]]:
-        rows = self._conn.execute(
-            "SELECT * FROM conversations ORDER BY updated_at DESC"
-        ).fetchall()
-        return [dict(r) for r in rows]
+    def list(self, *, limit: int, offset: int) -> list[dict[str, Any]]:
+        with self._db_lock:
+            rows = self._conn.execute(
+                "SELECT * FROM conversations ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            ).fetchall()
+            return [dict(r) for r in rows]
 
     def messages(self, conversation_id: str) -> list[dict[str, Any]]:
-        rows = self._conn.execute(
-            "SELECT idx, role, text, stop_reason, created_at FROM messages"
-            " WHERE conversation_id = ? ORDER BY idx ASC",
-            (conversation_id,),
-        ).fetchall()
-        return [dict(r) for r in rows]
+        with self._db_lock:
+            rows = self._conn.execute(
+                "SELECT idx, role, text, stop_reason, created_at FROM messages"
+                " WHERE conversation_id = ? ORDER BY idx ASC",
+                (conversation_id,),
+            ).fetchall()
+            return [dict(r) for r in rows]
 
     def delete(self, conversation_id: str) -> bool:
-        cur = self._conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
-        self._conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
-        self._conn.commit()
-        return cur.rowcount > 0
+        with self._db_lock:
+            cur = self._conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+            self._conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
+            self._conn.execute(
+                "DELETE FROM turn_idempotency WHERE conversation_id = ?", (conversation_id,)
+            )
+            self._conn.commit()
+            return cur.rowcount > 0
 
     def record_turn(
         self,
@@ -379,27 +450,59 @@ class ConversationStore:
         stop_reason: str,
         acp_session_id: str,
     ) -> dict[str, Any]:
-        now = time.time()
-        row = self._conn.execute(
-            "SELECT turns FROM conversations WHERE id = ?", (conversation_id,)
-        ).fetchone()
-        base = int(row["turns"]) if row else 0
-        user_idx = base * 2
-        agent_idx = base * 2 + 1
-        self._conn.execute(
-            "INSERT INTO messages (conversation_id, idx, role, text, stop_reason, created_at) VALUES (?,?,?,?,?,?)",
-            (conversation_id, user_idx, "user", user_text, None, now),
-        )
-        self._conn.execute(
-            "INSERT INTO messages (conversation_id, idx, role, text, stop_reason, created_at) VALUES (?,?,?,?,?,?)",
-            (conversation_id, agent_idx, "agent", agent_text, stop_reason, now),
-        )
-        self._conn.execute(
-            "UPDATE conversations SET turns = turns + 1, acp_session_id = ?, updated_at = ? WHERE id = ?",
-            (acp_session_id, now, conversation_id),
-        )
-        self._conn.commit()
-        return self.get(conversation_id)  # type: ignore[return-value]
+        with self._db_lock:
+            now = time.time()
+            row = self._conn.execute(
+                "SELECT turns FROM conversations WHERE id = ?", (conversation_id,)
+            ).fetchone()
+            if row is None:
+                # The conversation row is gone (e.g. deleted mid-turn). Do NOT
+                # fall back to base=0 or insert orphan messages.
+                raise KeyError(conversation_id)
+            base = int(row["turns"])
+            user_idx = base * 2
+            agent_idx = base * 2 + 1
+            try:
+                self._conn.execute(
+                    "INSERT INTO messages (conversation_id, idx, role, text, stop_reason, created_at) VALUES (?,?,?,?,?,?)",
+                    (conversation_id, user_idx, "user", user_text, None, now),
+                )
+                self._conn.execute(
+                    "INSERT INTO messages (conversation_id, idx, role, text, stop_reason, created_at) VALUES (?,?,?,?,?,?)",
+                    (conversation_id, agent_idx, "agent", agent_text, stop_reason, now),
+                )
+                cur = self._conn.execute(
+                    "UPDATE conversations SET turns = turns + 1, acp_session_id = ?, updated_at = ? WHERE id = ?",
+                    (acp_session_id, now, conversation_id),
+                )
+                assert cur.rowcount == 1
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+            return self.get(conversation_id)  # type: ignore[return-value]
+
+    def get_idempotent(self, conversation_id: str, key: str) -> Optional[dict[str, Any]]:
+        with self._db_lock:
+            row = self._conn.execute(
+                "SELECT response FROM turn_idempotency WHERE conversation_id = ? AND key = ?",
+                (conversation_id, key),
+            ).fetchone()
+            if row is None:
+                return None
+            try:
+                return json.loads(row["response"])
+            except Exception:
+                return None
+
+    def put_idempotent(self, conversation_id: str, key: str, response: dict[str, Any]) -> None:
+        with self._db_lock:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO turn_idempotency (conversation_id, key, response, created_at)"
+                " VALUES (?,?,?,?)",
+                (conversation_id, key, json.dumps(response), time.time()),
+            )
+            self._conn.commit()
 
 
 # --------------------------------------------------------------------------- #
@@ -412,7 +515,9 @@ class AcpRelay:
         self.config = config
         self._transport: Transport = transport or acp_transport
         self._store = ConversationStore(config.db_path)
-        self._locks: dict[tuple[int, str], asyncio.Lock] = {}
+        self._locks: "weakref.WeakKeyDictionary[Any, dict[str, asyncio.Lock]]" = (
+            weakref.WeakKeyDictionary()
+        )
 
     @property
     def store(self) -> ConversationStore:
@@ -422,13 +527,18 @@ class AcpRelay:
         self._store.close()
 
     def _lock(self, conversation_id: str) -> asyncio.Lock:
-        # Key by running loop so a cached Lock is never reused across event
-        # loops (production runs one loop; tests/TestClient may use several).
-        key = (id(asyncio.get_running_loop()), conversation_id)
-        lock = self._locks.get(key)
+        # Per (running loop, conversation) lock. The outer map is keyed by the
+        # loop OBJECT in a WeakKeyDictionary so dead loops (test/TestClient
+        # churn) are GC'd and growth stays bounded; production runs one loop.
+        loop = asyncio.get_running_loop()
+        per = self._locks.get(loop)
+        if per is None:
+            per = {}
+            self._locks[loop] = per
+        lock = per.get(conversation_id)
         if lock is None:
             lock = asyncio.Lock()
-            self._locks[key] = lock
+            per[conversation_id] = lock
         return lock
 
     def create_conversation(
@@ -456,13 +566,24 @@ class AcpRelay:
         convo["messages"] = self._store.messages(conversation_id)
         return convo
 
-    def list_conversations(self) -> list[dict[str, Any]]:
-        return self._store.list()
+    def list_conversations(self, *, limit: int, offset: int) -> list[dict[str, Any]]:
+        return self._store.list(limit=limit, offset=offset)
 
     def delete_conversation(self, conversation_id: str) -> bool:
-        return self._store.delete(conversation_id)
+        deleted = self._store.delete(conversation_id)
+        # Prune the conversation's lock from every per-loop map so it does not
+        # linger after the conversation is gone.
+        for per in list(self._locks.values()):
+            per.pop(conversation_id, None)
+        return deleted
 
-    async def turn(self, conversation_id: str, message: str) -> dict[str, Any]:
+    async def turn(
+        self,
+        conversation_id: str,
+        message: str,
+        *,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
         if not str(message or "").strip():
             raise ValueError("message must be a non-empty string")
         convo = self._store.get(conversation_id)
@@ -470,9 +591,16 @@ class AcpRelay:
             raise KeyError(conversation_id)
 
         async with self._lock(conversation_id):
+            # Idempotent replay: a previously-recorded turn with the same key
+            # returns the stored response without re-running the transport.
+            if idempotency_key:
+                cached = self._store.get_idempotent(conversation_id, idempotency_key)
+                if cached is not None:
+                    return cached
             # Re-read inside the lock so the session id reflects any prior turn.
             convo = self._store.get(conversation_id)
-            assert convo is not None
+            if convo is None:
+                raise KeyError(conversation_id)
             turn_config = replace(
                 self.config,
                 profile=convo["profile"],
@@ -499,14 +627,21 @@ class AcpRelay:
                 stop_reason=result.stop_reason,
                 acp_session_id=result.acp_session_id,
             )
-        return {
-            "conversation_id": conversation_id,
-            "turn": int(updated["turns"]),
-            "reply": result.reply,
-            "thoughts": result.thoughts,
-            "stop_reason": result.stop_reason,
-            "acp_session_id": result.acp_session_id,
-        }
+            response = {
+                "conversation_id": conversation_id,
+                "turn": int(updated["turns"]),
+                "reply": result.reply,
+                "thoughts": result.thoughts,
+                "stop_reason": result.stop_reason,
+                "acp_session_id": result.acp_session_id,
+                # ``incomplete`` flags a non-terminal stop (refusal, cancelled,
+                # max_tokens, …) so clients need not parse stop_reason. Only an
+                # empty reply raises; a non-empty incomplete reply is still 200.
+                "incomplete": result.stop_reason not in ("end_turn", ""),
+            }
+            if idempotency_key:
+                self._store.put_idempotent(conversation_id, idempotency_key, response)
+        return response
 
 
 # --------------------------------------------------------------------------- #
@@ -541,10 +676,30 @@ def reset_relay() -> None:
 # --------------------------------------------------------------------------- #
 
 
+def _db_writable(db_path: str) -> bool:
+    if db_path == ":memory:":
+        return True
+    parent = Path(db_path).parent
+    try:
+        parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        return False
+    return os.access(str(parent), os.W_OK)
+
+
 def readiness() -> dict[str, Any]:
     cfg = load_relay_config()
     hermes_bin = cfg.hermes_bin
-    bin_ok = bool(shutil.which(hermes_bin) or Path(hermes_bin).exists())
+    bin_found = bool(shutil.which(hermes_bin) or Path(hermes_bin).exists())
+    # bin_runnable: for an absolute/existing path require the exec bit; for a
+    # bare name (resolved via PATH) fall back to bin_found.
+    bin_path = Path(hermes_bin)
+    if bin_path.is_absolute() or bin_path.exists():
+        bin_runnable = os.access(str(bin_path), os.X_OK)
+    else:
+        bin_runnable = bin_found
+    cwd_ok = Path(cfg.cwd).is_dir()
+    db_writable = _db_writable(cfg.db_path)
     try:
         import acp  # noqa: F401
 
@@ -552,15 +707,21 @@ def readiness() -> dict[str, Any]:
     except Exception:
         acp_ok = False
     return {
-        "ok": bin_ok and acp_ok,
+        "ok": bin_runnable and acp_ok and cwd_ok and db_writable,
         "profile": cfg.profile,
         "model": cfg.model,
         "provider": cfg.provider,
         "model_choice": cfg.model_choice_id(),
         "hermes_bin": hermes_bin,
-        "hermes_bin_found": bin_ok,
+        "hermes_bin_found": bin_found,
         "acp_library": acp_ok,
         "db_path": cfg.db_path,
+        "checks": {
+            "bin_runnable": bin_runnable,
+            "cwd_ok": cwd_ok,
+            "db_writable": db_writable,
+            "acp_library": acp_ok,
+        },
     }
 
 
@@ -580,7 +741,69 @@ def handle(action: str, payload: list[str], context: dict[str, Any]) -> dict[str
 # FastAPI router (owned by Aphrodite)
 # --------------------------------------------------------------------------- #
 
-router = APIRouter(prefix="/acp", tags=["acp_relay"])
+def _validate_create_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Validate/normalize a POST /conversations body.
+
+    Returns ``{profile, model, provider, cwd, title}`` with None where a value
+    is absent or intentionally dropped. Raises ``HTTPException`` (422/403) on
+    bad input.
+    """
+    allowed_keys = {"profile", "model", "provider", "cwd", "title"}
+    unknown = sorted(set(payload) - allowed_keys)
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"unknown keys: {unknown}")
+
+    clean: dict[str, Any] = {}
+    for field in allowed_keys:
+        value = payload.get(field)
+        if value is None:
+            clean[field] = None
+            continue
+        if not isinstance(value, str):
+            raise HTTPException(status_code=422, detail=f"{field} must be a string")
+        value = value.strip()
+        clean[field] = value or None
+
+    # Profile allowlist (opt-in via APHRODITE_ACP_ALLOWED_PROFILES).
+    allowed = [
+        p.strip()
+        for p in os.environ.get("APHRODITE_ACP_ALLOWED_PROFILES", "").split(",")
+        if p.strip()
+    ]
+    if allowed and clean["profile"] and clean["profile"] not in allowed:
+        raise HTTPException(status_code=403, detail="profile not allowed")
+
+    # cwd override gate: dropped by default; only honored when explicitly
+    # enabled, and then only for an existing directory at/under the configured
+    # default cwd.
+    if clean["cwd"] is not None:
+        if not _flag("APHRODITE_ACP_ALLOW_CWD_OVERRIDE", False):
+            clean["cwd"] = None
+        else:
+            base = Path(_default_cwd()).resolve()
+            candidate = Path(clean["cwd"]).resolve()
+            if not candidate.is_dir():
+                raise HTTPException(status_code=403, detail="cwd is not a directory")
+            if candidate != base and base not in candidate.parents:
+                raise HTTPException(status_code=403, detail="cwd outside allowed root")
+            clean["cwd"] = str(candidate)
+
+    return clean
+
+
+def _require_auth(authorization: str | None = Header(default=None)) -> None:
+    token = os.environ.get("APHRODITE_ACP_AUTH_TOKEN", "").strip()
+    if not token:
+        return
+    if not authorization or not hmac.compare_digest(authorization, f"Bearer {token}"):
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+
+router = APIRouter(
+    prefix="/acp",
+    tags=["acp_relay"],
+    dependencies=[Depends(_require_auth)],
+)
 
 
 @router.get("/health")
@@ -590,20 +813,19 @@ def acp_health() -> dict[str, Any]:
 
 @router.post("/conversations")
 def acp_create_conversation(payload: dict[str, Any] | None = None) -> dict[str, Any]:
-    payload = payload or {}
-    convo = get_relay().create_conversation(
-        profile=payload.get("profile"),
-        model=payload.get("model"),
-        provider=payload.get("provider"),
-        cwd=payload.get("cwd"),
-        title=payload.get("title"),
-    )
-    return convo
+    validated = _validate_create_payload(payload or {})
+    return get_relay().create_conversation(**validated)
 
 
 @router.get("/conversations")
-def acp_list_conversations() -> dict[str, Any]:
-    return {"conversations": get_relay().list_conversations()}
+def acp_list_conversations(limit: int = LIST_DEFAULT_LIMIT, offset: int = 0) -> dict[str, Any]:
+    limit = max(1, min(limit, LIST_MAX_LIMIT))
+    offset = max(0, offset)
+    return {
+        "conversations": get_relay().list_conversations(limit=limit, offset=offset),
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/conversations/{conversation_id}")
@@ -623,13 +845,20 @@ def acp_delete_conversation(conversation_id: str) -> dict[str, Any]:
 
 
 @router.post("/conversations/{conversation_id}/turns")
-async def acp_turn(conversation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+async def acp_turn(
+    conversation_id: str,
+    payload: dict[str, Any],
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict[str, Any]:
     message = str((payload or {}).get("message") or "").strip()
     if not message:
         raise HTTPException(status_code=400, detail="message is required")
+    # Idempotency key: the ``Idempotency-Key`` header wins over a payload key.
+    payload_key = (payload or {}).get("idempotency_key")
+    key = idempotency_key or (payload_key if isinstance(payload_key, str) else None)
     relay = get_relay()
     try:
-        return await relay.turn(conversation_id, message)
+        return await relay.turn(conversation_id, message, idempotency_key=key)
     except KeyError:
         raise HTTPException(status_code=404, detail="conversation not found")
     except AcpTransportError as exc:

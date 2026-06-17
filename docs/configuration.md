@@ -58,7 +58,18 @@ OpenAI client>)` programmatically.
 | `APHRODITE_ACP_PROVIDER` | (unset) | Optional provider override; only used with `APHRODITE_ACP_MODEL`. When unset, the relay uses the Hermes profile's configured engine. |
 | `APHRODITE_ACP_HERMES_BIN` | discovered `hermes` executable | Binary used to spawn the external ACP runtime. |
 | `APHRODITE_ACP_DB` | `<hermes_root>/aphrodite/acp_relay.sqlite3` | SQLite conversation store path. |
-| `APHRODITE_ACP_CWD` | shared Hermes root | Working directory for the ACP subprocess. |
+| `APHRODITE_ACP_CWD` | shared Hermes root | Working directory for the ACP subprocess and the base directory for gated request `cwd` overrides. |
 | `APHRODITE_ACP_TURN_TIMEOUT` | `240.0` | Per-turn timeout in seconds. |
+| `APHRODITE_ACP_AUTH_TOKEN` | (unset; no auth) | Optional bearer token for `/acp/*`. When unset, `/acp` routes remain open for local use; when set, requests must send `Authorization: Bearer <token>`. |
+| `APHRODITE_ACP_ALLOWED_PROFILES` | (unset; any profile) | Optional comma-separated allowlist for requested conversation profiles. When unset, any profile may be requested. |
+| `APHRODITE_ACP_ALLOW_CWD_OVERRIDE` | `false` | Allows request payloads to override `cwd` only when true; by default request `cwd` values are ignored and the configured relay cwd is used. |
+| `APHRODITE_ACP_AUTO_APPROVE` | `true` | Auto-approves ACP permission prompts and sets `HERMES_YOLO_MODE=1` for the subprocess unless already set. Set false to deny permission prompts. |
+| `APHRODITE_ACP_ACCEPT_HOOKS` | `true` | Sets `HERMES_ACCEPT_HOOKS=1` for the subprocess unless already set. Set false to avoid accepting Hermes hooks automatically. |
 
-The ACP transport sets `HERMES_YOLO_MODE=1` and `HERMES_ACCEPT_HOOKS=1` in the subprocess environment if they are not already set, so non-interactive turns do not block on prompts.
+The ACP transport sets `HERMES_YOLO_MODE=1` and `HERMES_ACCEPT_HOOKS=1` in the subprocess environment only while `APHRODITE_ACP_AUTO_APPROVE` and `APHRODITE_ACP_ACCEPT_HOOKS` are true. Both default to true so existing headless forge flows keep running.
+
+All `/acp/*` routes require `Authorization: Bearer <token>` only when `APHRODITE_ACP_AUTH_TOKEN` is set. With the default unset token, the routes are open for local deployments.
+
+`GET /acp/conversations` supports pagination with `limit` and `offset` query parameters. `limit` defaults to `50` and is clamped to a maximum of `200`; `offset` defaults to `0`.
+
+`POST /acp/conversations/{conversation_id}/turns` accepts an idempotency key either in the `Idempotency-Key` header or as `idempotency_key` in the JSON payload. The header wins when both are present. A repeated key for the same conversation returns the stored successful response instead of running the transport again.
