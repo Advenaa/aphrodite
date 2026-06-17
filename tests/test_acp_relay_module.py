@@ -742,6 +742,26 @@ def test_create_profile_allowlist_403(tmp_path, monkeypatch):
         reset_relay()
 
 
+def test_create_profile_allowlist_gates_default_profile(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from aphrodite.app import create_app
+
+    # Default profile is "forge"; an allowlist that omits it must reject a
+    # profile-less POST that would otherwise fall back to the default profile.
+    monkeypatch.setenv("APHRODITE_ACP_ALLOWED_PROFILES", "alpha,beta")
+    monkeypatch.delenv("APHRODITE_ACP_PROFILE", raising=False)
+    configure_relay(_relay(tmp_path))
+    try:
+        with TestClient(create_app()) as client:
+            denied = client.post("/acp/conversations", json={})
+            assert denied.status_code == 403
+            allowed = client.post("/acp/conversations", json={"profile": "alpha"})
+            assert allowed.status_code == 200
+    finally:
+        reset_relay()
+
+
 def test_auth_enforced_when_token_set(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
@@ -794,6 +814,19 @@ def test_auto_approve_off_denies_and_omits_yolo_env(monkeypatch, tmp_path):
         )
     )
     assert resp.outcome.outcome == "cancelled"
+
+
+def test_auto_approve_off_strips_inherited_yolo_env(monkeypatch, tmp_path):
+    # Even when the parent process already exports YOLO / accept-hooks, opting
+    # out MUST strip them so an inherited value can't defeat the gate.
+    monkeypatch.setenv("APHRODITE_ACP_AUTO_APPROVE", "0")
+    monkeypatch.setenv("APHRODITE_ACP_ACCEPT_HOOKS", "0")
+    monkeypatch.setenv("HERMES_YOLO_MODE", "1")
+    monkeypatch.setenv("HERMES_ACCEPT_HOOKS", "1")
+    captured = _fake_acp(monkeypatch)
+    asyncio.run(acp_transport(_cfg(tmp_path), "hi", None))
+    assert "HERMES_YOLO_MODE" not in captured["env"]
+    assert "HERMES_ACCEPT_HOOKS" not in captured["env"]
 
 
 def test_auto_approve_default_sets_env_and_allows(monkeypatch, tmp_path):

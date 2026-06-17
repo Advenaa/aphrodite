@@ -261,11 +261,16 @@ async def acp_transport(
     env = dict(os.environ)
     # Non-interactive by default: avoid blocking on approvals/hooks. Both gates
     # default ON (keeps the verified forge flow working); set the corresponding
-    # env var to 0 to opt out.
+    # env var to 0 to opt out. Opt-out MUST strip any value inherited from the
+    # parent env, or a YOLO/accept-hooks setting there would defeat the gate.
     if auto_approve:
         env.setdefault("HERMES_YOLO_MODE", "1")
+    else:
+        env.pop("HERMES_YOLO_MODE", None)
     if accept_hooks:
         env.setdefault("HERMES_ACCEPT_HOOKS", "1")
+    else:
+        env.pop("HERMES_ACCEPT_HOOKS", None)
 
     async def _drive() -> TurnResult:
         async with acp.spawn_agent_process(
@@ -764,13 +769,16 @@ def _validate_create_payload(payload: dict[str, Any]) -> dict[str, Any]:
         value = value.strip()
         clean[field] = value or None
 
-    # Profile allowlist (opt-in via APHRODITE_ACP_ALLOWED_PROFILES).
+    # Profile allowlist (opt-in via APHRODITE_ACP_ALLOWED_PROFILES). Validate the
+    # EFFECTIVE profile: when the request omits one, create_conversation() falls
+    # back to the configured default, so the gate must cover that default too.
     allowed = [
         p.strip()
         for p in os.environ.get("APHRODITE_ACP_ALLOWED_PROFILES", "").split(",")
         if p.strip()
     ]
-    if allowed and clean["profile"] and clean["profile"] not in allowed:
+    effective_profile = clean["profile"] or _env("APHRODITE_ACP_PROFILE", DEFAULT_PROFILE)
+    if allowed and effective_profile not in allowed:
         raise HTTPException(status_code=403, detail="profile not allowed")
 
     # cwd override gate: dropped by default; only honored when explicitly
