@@ -105,19 +105,24 @@ not authenticate the OpenAI/Codex client.
 
 ## ACP relay
 
-`aphrodite/modules/acp_relay.py` bridges Aphrodite to an external ACP agent runtime.
+`aphrodite/modules/acp_relay.py` bridges Aphrodite to an external ACP agent runtime while Aphrodite owns the conversation database and HTTP boundary.
 
 Public surfaces:
 
 - `handle(action, payload, context)` for `DispatchRouter` registration. Actions `health`, `readiness`, and `status` report relay readiness. Other actions currently return a handled-false response that points callers to the `/acp` HTTP routes.
-- `router = APIRouter(prefix="/acp", tags=["acp_relay"])`, included by `create_app()`, with conversation and turn endpoints.
+- `router = APIRouter(prefix="/acp", tags=["acp_relay"])`, included by `create_app()`, with conversation and turn endpoints. `/acp/*` requires a bearer token only when `APHRODITE_ACP_AUTH_TOKEN` is set.
 - `AcpRelay`, `ConversationStore`, and configuration helpers used by the HTTP router and tests.
 
 Runtime behavior:
 
-- Conversation metadata and turns are stored in SQLite owned by Aphrodite.
-- The real transport spawns `hermes -p <profile> acp` and drives one ACP turn.
+- Conversation metadata, turns, and successful idempotent turn responses are stored in SQLite owned by Aphrodite.
+- The real transport spawns `hermes -p <profile> acp`, creates or resumes an ACP session, explicitly selects the configured engine, and drives one ACP turn.
+- If `APHRODITE_ACP_PROVIDER` and `APHRODITE_ACP_MODEL` are both set, that override wins. Otherwise the relay uses the spawned Hermes profile's own current model; no provider/model default is forced.
 - The `acp` Python client is imported lazily inside `acp_transport`; environments that do not install the optional client can still import the module and use tests/fake transports.
-- Default profile, provider, model, binary, working directory, database path, and turn timeout are configurable with `APHRODITE_ACP_*` environment variables.
+- Default profile, provider, model, binary, working directory, database path, turn timeout, optional auth token, profile allowlist, cwd override gate, and headless approval/hook toggles are configurable with `APHRODITE_ACP_*` environment variables.
+- Conversation creation can be constrained with `APHRODITE_ACP_ALLOWED_PROFILES`; request `cwd` overrides are ignored unless `APHRODITE_ACP_ALLOW_CWD_OVERRIDE=true` and the requested directory is under the configured relay cwd.
+- `GET /acp/conversations` supports `limit`/`offset` pagination. `POST /acp/conversations/{conversation_id}/turns` accepts an `Idempotency-Key` header or `idempotency_key` payload field.
+- Readiness includes executable, cwd, database-writability, and ACP-library checks. Transport failures map to `502`; stale external ACP sessions are replaced with fresh sessions, losing only the upstream ACP context.
+- Turn responses include an `incomplete` flag for non-end stop reasons. The relay is intentionally text-only: assistant/thought text is retained, while non-text ACP content blocks are ignored.
 
-Default relay settings in the current code are profile `forge` and timeout `240.0` seconds. Provider and model are unset by default, so the relay uses the Hermes profile's configured engine unless `APHRODITE_ACP_PROVIDER` and `APHRODITE_ACP_MODEL` are both set.
+Default relay settings in the current code are profile `forge` and timeout `240.0` seconds. Provider and model are unset by default, so the relay uses the Hermes profile's configured engine unless `APHRODITE_ACP_PROVIDER` and `APHRODITE_ACP_MODEL` are both set. Auto-approve and accept-hooks toggles default to true so headless forge turns continue to run without prompting.

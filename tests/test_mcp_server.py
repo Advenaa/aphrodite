@@ -119,10 +119,9 @@ def test_mcp_import_wrapper_preserves_explicit_replace_boundary(skillopt_data, t
     assert refused["error_type"] == "exists"
 
 
-
 def test_mcp_image_gen_wrappers_return_static_metadata():
+    status = mcp_server.aphrodite_image_gen_status()
     json.dumps(status)
-    assert status["handled"] is True
     assert status["handled"] is True
     assert status["default_model"]
 
@@ -134,9 +133,9 @@ def test_mcp_image_gen_wrappers_return_static_metadata():
     assert models["default_model"]
 
     sizes = mcp_server.aphrodite_image_gen_sizes()
-    assert sizes["handled"] is True
     json.dumps(sizes)
     assert sizes["handled"] is True
+    assert isinstance(sizes["sizes"], list)
     assert sizes["sizes"]
     assert isinstance(sizes["aspect_ratios"], list)
     assert sizes["aspect_ratios"]
@@ -163,20 +162,20 @@ def test_mcp_acp_relay_wrappers_return_read_only_store_metadata(monkeypatch, tmp
         missing = mcp_server.aphrodite_acp_relay_get_conversation("does-not-exist")
         assert missing["ok"] is False
         assert missing["error_type"] == "not_found"
-
         json.dumps(missing)
+
         invalid = mcp_server.aphrodite_acp_relay_get_conversation("")
         assert invalid["ok"] is False
         assert invalid["error_type"] == "invalid_argument"
-
         json.dumps(invalid)
+
         created = relay.create_conversation(title="mcp wrapper")
         found = mcp_server.aphrodite_acp_relay_get_conversation(created["id"])
         assert found["ok"] is True
         assert found["conversation"]["id"] == created["id"]
         assert found["conversation"]["title"] == "mcp wrapper"
-    finally:
         json.dumps(found)
+    finally:
         mcp_server.acp_relay.reset_relay()
 
 @pytest.mark.skipif(mcp_server.FastMCP is None, reason="mcp Python SDK is not installed")
