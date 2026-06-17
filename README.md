@@ -48,6 +48,31 @@ pip install -e ".[dev]"        # contributors (editable + test deps)
 
 Requires Python 3.10+. Runtime dependencies: `fastapi`, `pynacl`, `uvicorn`. Extras: `mcp` (MCP server), `acp` (ACP relay transport).
 
+## Updating
+
+Use the same one-line installer for first installs and later updates:
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Advenaa/aphrodite/main/install.sh | bash
+```
+
+From an existing install:
+
+```bash
+aphrodite update          # self-upgrade; prints before -> after and preserves [mcp,acp] extras automatically
+aphrodite update --check  # compare only; makes no changes
+aphrodite version         # print the installed Aphrodite version
+```
+
+Aphrodite shows a daily update notice in interactive terminals. Disable it with
+`APHRODITE_NO_UPDATE_NOTIFIER=1`.
+
+Manual fallback:
+
+```bash
+pip install --upgrade "aphrodite-sidecar[mcp,acp] @ git+https://github.com/Advenaa/aphrodite"
+```
+
 ## Quickstart
 
 ```bash
@@ -70,6 +95,8 @@ The `aphrodite` console script (and `python scripts/aphrodite`) exposes:
 | `preflight [--production]` | Report whether the service is ready to activate, without starting it. |
 | `endpoint-preflight` | Read-only readiness for the public Discord interaction endpoint. |
 | `dispatch-test <custom_id>` | Dispatch a custom id through the configured router. |
+| version | Print the installed Aphrodite version. |
+| update [--check] | Self-upgrade the install and print before/after versions; --check only compares. |
 
 ## MCP server
 
@@ -129,7 +156,7 @@ See [`docs/configuration.md`](docs/configuration.md) for the full list.
 - [Module adapters](docs/module-adapters.md)
 - [ACP relay](docs/acp-relay.md)
 - [Private overlay](docs/private-overlay.md)
-
+- [Changelog](CHANGELOG.md)
 
 ## Deployment
 
