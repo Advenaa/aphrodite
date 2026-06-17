@@ -278,11 +278,21 @@ def test_skillopt_dispatch_exposes_read_only_run_and_eval_actions(monkeypatch, t
     assert fetched_eval == skillopt.get_eval("dispatch-eval")
 
 
+def test_skillopt_generated_run_id_can_be_fetched(monkeypatch, tmp_path):
+    monkeypatch.setenv("APHRODITE_SKILLOPT_DATA_ROOT", str(tmp_path / "data"))
+    created = skillopt.create_run({"skill_name": "generated-id", "best_skill_md": BEST_SKILL})
+    assert created["ok"] is True
+
+    fetched = skillopt.get_run(created["run_id"])
+    assert fetched["ok"] is True
+    assert fetched["run_id"] == created["run_id"]
+
+
 def test_skillopt_dispatch_validation_rejects_malformed_and_path_ids(monkeypatch, tmp_path):
     monkeypatch.setenv("APHRODITE_SKILLOPT_DATA_ROOT", str(tmp_path / "data"))
     client = TestClient(create_app())
 
-    bad_run = skillopt.handle("get_run", ["../outside"], {}) 
+    bad_run = skillopt.handle("get_run", ["../outside"], {})
     assert bad_run["ok"] is False
     assert bad_run["error_type"] == "invalid_argument"
     assert "not a path" in bad_run["error"]
@@ -302,6 +312,10 @@ def test_skillopt_dispatch_validation_rejects_malformed_and_path_ids(monkeypatch
     assert malformed_eval["error_type"] == "invalid_argument"
     assert "eval_id" in malformed_eval["error"]
 
+    missing_payload = client.post("/dispatch/skillopt:v1:get_run").json()["result"]
+    assert missing_payload["ok"] is False
+    assert missing_payload["error_type"] == "invalid_argument"
+
 
 def test_skillopt_create_and_train_error_envelopes_are_consistent(monkeypatch, tmp_path):
     monkeypatch.setenv("APHRODITE_SKILLOPT_DATA_ROOT", str(tmp_path / "data"))
@@ -316,6 +330,11 @@ def test_skillopt_create_and_train_error_envelopes_are_consistent(monkeypatch, t
     assert trained["ok"] is False
     assert trained["error_type"] == "invalid_argument"
     assert "run_id" in trained["error"]
+    train_io = skillopt.train_run(
+        {"run_id": "skillopt-missing-command", "skill_name": "safe-skill", "command": [str(tmp_path / "missing")]}
+    )
+    assert train_io["ok"] is False
+    assert train_io["error_type"] == "io_error"
 
     eval_result = skillopt.create_eval({"eval_id": "../escape"})
     assert eval_result["ok"] is False

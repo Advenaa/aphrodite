@@ -585,6 +585,8 @@ def handle(action: str, payload: list[str], context: dict[str, Any]) -> dict[str
         "payload": payload,
         "error_type": "unsupported_action",
         "error": "action is only available through the /acp HTTP routes",
+        "route": "/acp",
+        "message": "acp_relay dispatch supports health/readiness/status/list/get; use the /acp HTTP routes for conversational turns",
         "routes": {
             "conversations": "/acp/conversations",
             "turns": "/acp/conversations/{id}/turns",
