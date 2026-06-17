@@ -1,0 +1,38 @@
+# Keep the build context small and never bake secrets/local state into images.
+
+.git
+.gitignore
+
+# Python caches and virtualenvs.
+__pycache__
+*.py[cod]
+.venv
+venv
+.pytest_cache
+.coverage
+htmlcov
+
+# Build / packaging artifacts.
+build
+dist
+*.egg-info
+*.whl
+
+# Operator secrets and local environment (never copy into images).
+config/*.env
+.env
+.env.*
+
+# Private overlay, vendored reference, and operator-generated data.
+.local
+_acp_ref
+data
+
+# Repo material not needed to build or run the service.
+tests
+docs
+systemd
+caddy
+scripts
+*.md
+!README.md

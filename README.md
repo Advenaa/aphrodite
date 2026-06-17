@@ -124,6 +124,7 @@ See [`docs/configuration.md`](docs/configuration.md) for the full list.
 
 - [Configuration](docs/configuration.md)
 - [Deployment](docs/deployment.md)
+- [Container deployment](docs/deployment-docker.md)
 - [Discord interactions](docs/discord-interactions.md)
 - [Module adapters](docs/module-adapters.md)
 - [ACP relay](docs/acp-relay.md)
@@ -143,6 +144,11 @@ The systemd template intentionally does not auto-start or enable the service.
 has approved activation. Set `APHRODITE_DISCORD_PUBLIC_KEY` (the Discord
 application public key, not the bot token) before exposing the production
 interaction endpoint. See [`docs/deployment.md`](docs/deployment.md).
+
+Aphrodite also ships a multi-stage `Dockerfile`, `.dockerignore`, and a
+`docker-compose.yml` example for container deployments. The container binds
+`0.0.0.0` (the app default stays loopback) and publishes to host loopback for a
+reverse proxy to front. See [`docs/deployment-docker.md`](docs/deployment-docker.md).
 
 ## Development
 

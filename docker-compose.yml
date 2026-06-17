@@ -1,0 +1,48 @@
+# Aphrodite container deployment example.
+#
+# Copy config/aphrodite.env.example to config/aphrodite.env and fill in
+# deployment values before exposing anything. The env file is gitignored and is
+# loaded optionally below, so the stack still starts (loopback-only, CORS and
+# the Discord endpoint disabled) before you create it.
+#
+# Do not commit real secrets. Use placeholder hosts while editing examples.
+
+services:
+  aphrodite:
+    build:
+      context: .
+    image: aphrodite-sidecar:local
+    # The app defaults to 127.0.0.1; the container binds 0.0.0.0 (see the
+    # Dockerfile CMD). These mirror that for any code that reads the config.
+    environment:
+      APHRODITE_HOST: "0.0.0.0"
+      APHRODITE_PORT: "9079"
+    env_file:
+      - path: config/aphrodite.env
+        required: false
+    ports:
+      # Publish to the host loopback only; let a reverse proxy own the public
+      # HTTPS origin. Change to "9079:9079" only if you front it differently.
+      - "127.0.0.1:9079:9079"
+    restart: unless-stopped
+
+  # Optional reverse proxy. Uncomment after editing
+  # caddy/aphrodite.caddy.example with a real HTTPS hostname and confirming the
+  # aphrodite service is healthy. The example proxies to 127.0.0.1:9079, so
+  # adjust the upstream to the `aphrodite` service name when running in Compose.
+  # caddy:
+  #   image: caddy:2
+  #   depends_on:
+  #     - aphrodite
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./caddy/aphrodite.caddy.example:/etc/caddy/Caddyfile:ro
+  #     - caddy_data:/data
+  #     - caddy_config:/config
+  #   restart: unless-stopped
+
+# volumes:
+#   caddy_data:
+#   caddy_config:
