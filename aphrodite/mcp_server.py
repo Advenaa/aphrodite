@@ -10,7 +10,7 @@ if __package__ in {None, ""}:
     #   python /path/to/aphrodite/aphrodite/mcp_server.py
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from aphrodite.modules import skillopt
+from aphrodite.modules import acp_relay, image_gen, skillopt
 
 try:  # pragma: no cover - exercised when the optional SDK is installed.
     from mcp.server.fastmcp import FastMCP
@@ -29,6 +29,12 @@ TOOL_NAMES = [
     "aphrodite_skillopt_get_evaluation",
     "aphrodite_skillopt_import_candidate",
     "aphrodite_skillopt_export_bundle",
+    "aphrodite_image_gen_status",
+    "aphrodite_image_gen_models",
+    "aphrodite_image_gen_sizes",
+    "aphrodite_acp_relay_readiness",
+    "aphrodite_acp_relay_list_conversations",
+    "aphrodite_acp_relay_get_conversation",
 ]
 
 
@@ -103,6 +109,36 @@ def aphrodite_skillopt_export_bundle(run_id: str) -> dict[str, Any]:
     return _json_safe(skillopt.export_bundle(run_id))
 
 
+def aphrodite_image_gen_status() -> dict[str, Any]:
+    """Report Aphrodite image_gen provider and default model."""
+    return _json_safe(image_gen.handle("status", [], {}))
+
+
+def aphrodite_image_gen_models() -> dict[str, Any]:
+    """List Aphrodite image_gen models and the default model."""
+    return _json_safe(image_gen.handle("models", [], {}))
+
+
+def aphrodite_image_gen_sizes() -> dict[str, Any]:
+    """List Aphrodite image_gen sizes and aspect ratios."""
+    return _json_safe(image_gen.handle("sizes", [], {}))
+
+
+def aphrodite_acp_relay_readiness() -> dict[str, Any]:
+    """Report Aphrodite ACP relay readiness (hermes bin, acp library, db path)."""
+    return _json_safe(acp_relay.handle("readiness", [], {}))
+
+
+def aphrodite_acp_relay_list_conversations() -> dict[str, Any]:
+    """List Aphrodite ACP relay conversations (metadata only)."""
+    return _json_safe(acp_relay.handle("list", [], {}))
+
+
+def aphrodite_acp_relay_get_conversation(conversation_id: str) -> dict[str, Any]:
+    """Get one Aphrodite ACP relay conversation with messages, or a not_found envelope."""
+    return _json_safe(acp_relay.handle("get", [conversation_id], {}))
+
+
 def build_server() -> Any:
     """Build the optional FastMCP stdio server without starting it."""
     if FastMCP is None:
@@ -110,7 +146,9 @@ def build_server() -> Any:
     mcp = FastMCP(
         "aphrodite",
         instructions=(
-            "Aphrodite no-core sidecar MCP server. v0 exposes review-gated SkillOpt tools only. "
+            "Aphrodite no-core sidecar MCP server. Exposes review-gated SkillOpt tools plus "
+            "read-only image_gen and acp_relay metadata over stdio. Image generation and ACP "
+            "conversational turns stay on the Aphrodite HTTP surface. "
             "SkillOpt recommendations are advisory; imports are explicit generated-skill writes."
         ),
     )
@@ -125,6 +163,12 @@ def build_server() -> Any:
         aphrodite_skillopt_get_evaluation,
         aphrodite_skillopt_import_candidate,
         aphrodite_skillopt_export_bundle,
+        aphrodite_image_gen_status,
+        aphrodite_image_gen_models,
+        aphrodite_image_gen_sizes,
+        aphrodite_acp_relay_readiness,
+        aphrodite_acp_relay_list_conversations,
+        aphrodite_acp_relay_get_conversation,
     ):
         mcp.tool(name=fn.__name__)(fn)
     return mcp

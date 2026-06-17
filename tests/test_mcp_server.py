@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -39,6 +40,12 @@ def test_mcp_wrapper_tool_names_are_stable():
         "aphrodite_skillopt_get_evaluation",
         "aphrodite_skillopt_import_candidate",
         "aphrodite_skillopt_export_bundle",
+        "aphrodite_image_gen_status",
+        "aphrodite_image_gen_models",
+        "aphrodite_image_gen_sizes",
+        "aphrodite_acp_relay_readiness",
+        "aphrodite_acp_relay_list_conversations",
+        "aphrodite_acp_relay_get_conversation",
     ]
 
 
@@ -111,6 +118,66 @@ def test_mcp_import_wrapper_preserves_explicit_replace_boundary(skillopt_data, t
     assert refused["ok"] is False
     assert refused["error_type"] == "exists"
 
+
+
+def test_mcp_image_gen_wrappers_return_static_metadata():
+    json.dumps(status)
+    assert status["handled"] is True
+    assert status["handled"] is True
+    assert status["default_model"]
+
+    models = mcp_server.aphrodite_image_gen_models()
+    json.dumps(models)
+    assert models["handled"] is True
+    assert isinstance(models["models"], list)
+    assert models["models"]
+    assert models["default_model"]
+
+    sizes = mcp_server.aphrodite_image_gen_sizes()
+    assert sizes["handled"] is True
+    json.dumps(sizes)
+    assert sizes["handled"] is True
+    assert sizes["sizes"]
+    assert isinstance(sizes["aspect_ratios"], list)
+    assert sizes["aspect_ratios"]
+
+
+def test_mcp_acp_relay_wrappers_return_read_only_store_metadata(monkeypatch, tmp_path):
+    db_path = tmp_path / "acp.sqlite3"
+    monkeypatch.setenv("APHRODITE_ACP_DB", str(db_path))
+    relay = mcp_server.acp_relay.AcpRelay(
+        mcp_server.acp_relay.RelayConfig(cwd=str(tmp_path), db_path=str(db_path))
+    )
+    mcp_server.acp_relay.configure_relay(relay)
+    try:
+        readiness = mcp_server.aphrodite_acp_relay_readiness()
+        assert readiness["ok"] is True
+        json.dumps(readiness)
+        assert readiness["readiness"]["db_path"] == str(db_path)
+
+        listed = mcp_server.aphrodite_acp_relay_list_conversations()
+        assert listed["ok"] is True
+        assert listed["conversations"] == []
+        json.dumps(listed)
+
+        missing = mcp_server.aphrodite_acp_relay_get_conversation("does-not-exist")
+        assert missing["ok"] is False
+        assert missing["error_type"] == "not_found"
+
+        json.dumps(missing)
+        invalid = mcp_server.aphrodite_acp_relay_get_conversation("")
+        assert invalid["ok"] is False
+        assert invalid["error_type"] == "invalid_argument"
+
+        json.dumps(invalid)
+        created = relay.create_conversation(title="mcp wrapper")
+        found = mcp_server.aphrodite_acp_relay_get_conversation(created["id"])
+        assert found["ok"] is True
+        assert found["conversation"]["id"] == created["id"]
+        assert found["conversation"]["title"] == "mcp wrapper"
+    finally:
+        json.dumps(found)
+        mcp_server.acp_relay.reset_relay()
 
 @pytest.mark.skipif(mcp_server.FastMCP is None, reason="mcp Python SDK is not installed")
 def test_mcp_fastmcp_registers_expected_tools(skillopt_data):

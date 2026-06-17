@@ -73,7 +73,7 @@ The `aphrodite` console script (and `python scripts/aphrodite`) exposes:
 
 ## MCP server
 
-Aphrodite ships an optional [MCP](https://modelcontextprotocol.io) server exposing the review-gated SkillOpt tools over stdio. It requires the `mcp` extra:
+Aphrodite ships an optional [MCP](https://modelcontextprotocol.io) server exposing the review-gated SkillOpt tools plus read-only image_gen and acp_relay metadata over stdio. It requires the `mcp` extra:
 
 ```bash
 pip install "aphrodite-sidecar[mcp] @ git+https://github.com/Advenaa/aphrodite"
