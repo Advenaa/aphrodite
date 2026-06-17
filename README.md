@@ -101,6 +101,7 @@ Configuration is environment-driven. The most important variables:
 
 - `APHRODITE_HOST` (default `127.0.0.1`), `APHRODITE_PORT` (default `9079`)
 - `APHRODITE_MODULES` — comma-separated list of enabled module adapters
+- APHRODITE_CORS_ORIGINS — comma-separated browser origins allowed to call the HTTP API cross-origin (unset = CORS disabled; * allows any origin with credentials disabled)
 - `HERMES_HOME` — locates the external Hermes home (falls back to `~/.hermes`)
 - `APHRODITE_DISCORD_PUBLIC_KEY` — Discord application public key used to verify
   inbound interaction signatures (required for the production endpoint)

@@ -526,7 +526,7 @@ def create_eval(payload: dict[str, Any]) -> dict[str, Any]:
 
 def list_evals() -> dict[str, Any]:
     evals = []
-    for path in sorted(_evals_root().iterdir()):
+    for path in sorted(_evals_root().iterdir(), reverse=True):
         if path.is_dir():
             manifest = _json(path / "manifest.json") or {"eval_id": path.name}
             manifest["eval_dir"] = str(path)

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aphrodite-sidecar"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Reusable Hermes plugin sidecar and FastAPI Discord-interaction dispatch backend."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -18,12 +18,19 @@ dependencies = [
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.0"]
-# Confirm the acp distribution name on PyPI; aphrodite/modules/acp_relay.py imports it lazily so the package works without it.
-acp = ["acp"]
+acp = ["agent-client-protocol>=0.10,<1"]
 dev = ["pytest>=8", "httpx>=0.27"]
 
 [project.scripts]
 aphrodite = "aphrodite.cli:main"
+
+[project.entry-points."aphrodite.adapters"]
+image_gen = "aphrodite.modules.image_gen:handle"
+skillopt = "aphrodite.modules.skillopt:handle"
+acp_relay = "aphrodite.modules.acp_relay:handle"
+
+[tool.setuptools.dynamic]
+version = {attr = "aphrodite.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["aphrodite*"]

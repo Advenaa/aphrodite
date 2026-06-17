@@ -5,6 +5,7 @@ import os
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from . import __version__
@@ -13,6 +14,7 @@ from .discord.intake import handle_interaction_payload
 from .discord.signature import verify_discord_signature
 from .router import DispatchRouter
 from .readiness import http_runtime_observability, mcp_readiness, production_endpoint_preflight, service_readiness
+from .modules import discover_adapters
 from .modules.acp_relay import router as acp_relay_router
 
 
@@ -29,21 +31,10 @@ def health_payload() -> dict[str, Any]:
 
 def build_router() -> DispatchRouter:
     router = DispatchRouter()
+    adapters = discover_adapters()
     for system in load_config().modules:
-        if system == "image_gen":
-            from .modules.image_gen import handle as handle_image_gen
-
-            router.register(system, handle_image_gen)
-        elif system == "skillopt":
-            from .modules.skillopt import handle as handle_skillopt
-
-            router.register(system, handle_skillopt)
-        elif system == "acp_relay":
-            from .modules.acp_relay import handle as handle_acp_relay
-
-            router.register(system, handle_acp_relay)
-        else:
-            router.register(system, _placeholder_handler(system))
+        handler = adapters.get(system)
+        router.register(system, handler if handler is not None else _placeholder_handler(system))
     return router
 
 
@@ -62,6 +53,21 @@ def _placeholder_handler(system: str):
 
 def create_app():
     app = FastAPI(title="Aphrodite", version=__version__)
+    cfg = load_config()
+    if cfg.cors_origins:
+        if "*" in cfg.cors_origins:
+            allow_origins = ["*"]
+            allow_credentials = False
+        else:
+            allow_origins = list(cfg.cors_origins)
+            allow_credentials = True
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=allow_origins,
+            allow_credentials=allow_credentials,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
     router = build_router()
 
     @app.get("/health")

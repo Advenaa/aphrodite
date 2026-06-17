@@ -13,6 +13,7 @@ class AphroditeConfig:
     port: int = 9079
     hermes_home: Path = Path.home() / ".hermes"
     modules: tuple[str, ...] = tuple(DEFAULT_MODULES)
+    cors_origins: tuple[str, ...] = ()
     no_core_policy: str = "no-hermes-core"
 
 
@@ -26,9 +27,14 @@ def load_config() -> AphroditeConfig:
     modules = tuple(
         part.strip() for part in modules_raw.split(",") if part.strip()
     ) or tuple(DEFAULT_MODULES)
+    cors_origins_raw = os.environ.get("APHRODITE_CORS_ORIGINS", "").strip()
+    cors_origins = tuple(
+        part.strip() for part in cors_origins_raw.split(",") if part.strip()
+    )
     return AphroditeConfig(
         host=os.environ.get("APHRODITE_HOST", "127.0.0.1"),
         port=port,
         hermes_home=Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes")).expanduser(),
         modules=modules,
+        cors_origins=cors_origins,
     )

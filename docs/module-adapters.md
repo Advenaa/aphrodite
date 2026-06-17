@@ -22,9 +22,9 @@ A successful dispatch response includes `ok`, `system`, `version`, `action`, `pa
 
 ## Bundled adapters
 
-`aphrodite.app.build_router()` registers the configured modules from
-`APHRODITE_MODULES`. The default public set is
-`image_gen,skillopt,acp_relay`.
+`aphrodite.app.build_router()` discovers dispatch handlers published under the
+`aphrodite.adapters` entry-point group, then registers the configured names from
+`APHRODITE_MODULES`. The default public set is `image_gen,skillopt,acp_relay`.
 
 | Adapter | Purpose | Standalone behavior |
 | --- | --- | --- |
@@ -33,31 +33,49 @@ A successful dispatch response includes `ok`, `system`, `version`, `action`, `pa
 | `acp_relay` | Bridges Aphrodite to an external ACP agent runtime and exposes both dispatch and `/acp/*` HTTP surfaces. | Requires a working external Hermes/ACP runtime for real turns; fake transports can test the Aphrodite-owned pieces. |
 
 Adapters that bridge private Hermes plugins belong in the operator overlay, not
-the public module set. Custom modules can still be registered by listing their
-names in `APHRODITE_MODULES`; unknown names are wired to a placeholder handler
-so startup remains deterministic.
+the public module set. Custom modules can still be enabled by listing their
+system names in `APHRODITE_MODULES`; each system name must match an entry-point
+name. Unknown names fall back to a placeholder handler so startup remains
+deterministic.
 
 ## Adding an adapter
 
-1. Create or update a module under `aphrodite/modules/`.
-2. Expose a callable with this signature:
+1. Implement a dispatch handler in your module:
 
 ```python
 def handle(action: str, payload: list[str], context: dict[str, Any]) -> dict[str, Any]:
     ...
 ```
 
-3. Return dictionaries with stable fields. Prefer `ok: true` or `ok: false` plus an `error` string for failures.
-4. Register the module in `aphrodite/app.py` inside `build_router()`:
+2. Declare an entry point in your package's `pyproject.toml` so Aphrodite can
+   discover it. The entry-point group is `aphrodite.adapters`; the entry-point
+   name is the system name used in `APHRODITE_MODULES`, and the value points to
+   the handler:
 
-```python
-elif system == "my_adapter":
-    from .modules.my_adapter import handle as handle_my_adapter
-
-    router.register(system, handle_my_adapter)
+```toml
+[project.entry-points."aphrodite.adapters"]
+my_adapter = "your_pkg.your_module:handle"
 ```
 
-5. Add the adapter name to `APHRODITE_MODULES` when it should be active.
+3. Reinstall the package so Python refreshes the entry-point metadata:
+
+```bash
+pip install -e .
+```
+
+4. Add the adapter name to `APHRODITE_MODULES` when it should be active. A
+   configured name with no discovered adapter falls back to Aphrodite's
+   placeholder handler instead of crashing.
+
+Return dictionaries with stable fields. Prefer `ok: true` or `ok: false` plus
+an `error` string for failures.
+
+Third-party packages and private-overlay adapters register the same way: they
+ship their own entry points in the `aphrodite.adapters` group. Aphrodite's
+public tree never imports them directly, which keeps the `NO_CORE_POLICY` /
+private-overlay fresh-clone rule intact. The native trio (`image_gen`,
+`skillopt`, and `acp_relay`) is registered exactly this way in Aphrodite's own
+`pyproject.toml`.
 
 Keep adapter boundaries narrow: Aphrodite should call public plugin/runtime APIs and should not patch the external runtime core.
 
