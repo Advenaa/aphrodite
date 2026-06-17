@@ -32,15 +32,15 @@ static files, cron/systemd, and the local filesystem. See
 Install from GitHub (no clone needed):
 
 ```bash
-pip install "git+https://github.com/<org>/aphrodite"
+pip install "git+https://github.com/Advenaa/aphrodite"
 # with optional extras (MCP server, ACP relay transport):
-pip install "aphrodite-sidecar[mcp,acp] @ git+https://github.com/<org>/aphrodite"
+pip install "aphrodite-sidecar[mcp,acp] @ git+https://github.com/Advenaa/aphrodite"
 ```
 
 Or from a clone:
 
 ```bash
-git clone https://github.com/<org>/aphrodite && cd aphrodite
+git clone https://github.com/Advenaa/aphrodite && cd aphrodite
 python -m venv .venv && . .venv/bin/activate
 pip install .                  # users
 pip install -e ".[dev]"        # contributors (editable + test deps)
@@ -76,7 +76,7 @@ The `aphrodite` console script (and `python scripts/aphrodite`) exposes:
 Aphrodite ships an optional [MCP](https://modelcontextprotocol.io) server exposing the review-gated SkillOpt tools over stdio. It requires the `mcp` extra:
 
 ```bash
-pip install "aphrodite-sidecar[mcp] @ git+https://github.com/<org>/aphrodite"
+pip install "aphrodite-sidecar[mcp] @ git+https://github.com/Advenaa/aphrodite"
 python -m aphrodite.mcp_server      # stdio transport
 ```
 
