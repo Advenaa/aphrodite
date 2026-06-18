@@ -15,27 +15,42 @@ from .serve import run_server
 from .update import maybe_notify_update, update_payload, version_payload
 
 
+def _emit(command: str, payload: dict, args: argparse.Namespace) -> None:
+    import sys
+
+    if getattr(args, "json", False) or not sys.stdout.isatty():
+        print(json.dumps(payload, indent=2))
+    else:
+        from .render import render
+
+        print(render(command, payload))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="aphrodite", description="Aphrodite sidecar backend CLI")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--json", action="store_true", help="Emit raw JSON instead of a human summary")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("health")
-    sub.add_parser("doctor")
-    sub.add_parser("endpoint-preflight")
-    sub.add_parser("version")
-    update = sub.add_parser("update")
+    sub.add_parser("health", parents=[common])
+    sub.add_parser("doctor", parents=[common])
+    sub.add_parser("endpoint-preflight", parents=[common])
+    sub.add_parser("version", parents=[common])
+    update = sub.add_parser("update", parents=[common])
     update.add_argument("--check", action="store_true")
-    preflight = sub.add_parser("preflight")
+    preflight = sub.add_parser("preflight", parents=[common])
     preflight.add_argument("--production", action="store_true")
     dispatch = sub.add_parser(
         "dispatch-test",
         help="Dispatch one custom-id through the configured router",
         description="Dispatch a custom-id formatted as system:v1:action[:arg...] through the configured router.",
+        parents=[common],
     )
     dispatch.add_argument("custom_id")
     new_module = sub.add_parser(
         "new-module",
         help="Scaffold an adapter package",
         description="Scaffold a ready-to-edit Aphrodite adapter package with entry-point metadata.",
+        parents=[common],
     )
     new_module.add_argument("name")
     new_module.add_argument("--dir", default=".")
@@ -43,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         "serve",
         help="Run the Aphrodite FastAPI server",
         description="Run the Aphrodite FastAPI server with uvicorn.",
+        parents=[common],
     )
     serve.add_argument("--host", default=None)
     serve.add_argument("--port", type=int, default=None)
@@ -51,36 +67,37 @@ def main(argv: list[str] | None = None) -> int:
         "modules",
         help="List configured and discovered module adapters",
         description="Print Aphrodite module adapter inventory as JSON.",
+        parents=[common],
     )
     args = parser.parse_args(argv)
     maybe_notify_update(args.command)
 
     if args.command == "health":
-        print(json.dumps(health_payload(), indent=2))
+        _emit("health", health_payload(), args)
         return 0
     if args.command == "doctor":
         payload = doctor_payload()
-        print(json.dumps(payload, indent=2))
+        _emit("doctor", payload, args)
         return 0 if payload["ok"] else 1
     if args.command == "endpoint-preflight":
         payload = production_endpoint_preflight()
-        print(json.dumps(payload, indent=2))
+        _emit("endpoint-preflight", payload, args)
         return 0 if payload["ok"] else 1
     if args.command == "preflight":
         payload = preflight_payload(production=bool(getattr(args, "production", False)))
-        print(json.dumps(payload, indent=2))
+        _emit("preflight", payload, args)
         return 0 if payload["ok"] else 1
     if args.command == "dispatch-test":
         router = build_router()
         payload = router.dispatch(args.custom_id, context={"source": "cli"})
-        print(json.dumps(payload, indent=2))
+        _emit("dispatch-test", payload, args)
         return 0 if payload["ok"] and payload.get("result", {}).get("ok", True) else 1
     if args.command == "version":
-        print(json.dumps(version_payload(), indent=2))
+        _emit("version", version_payload(), args)
         return 0
     if args.command == "update":
         payload = update_payload(check=bool(getattr(args, "check", False)))
-        print(json.dumps(payload, indent=2))
+        _emit("update", payload, args)
         return 0 if payload["ok"] else 1
     if args.command == "serve":
         cfg = load_config()
@@ -91,11 +108,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "modules":
         payload = modules_payload()
-        print(json.dumps(payload, indent=2))
+        _emit("modules", payload, args)
         return 0 if payload["ok"] else 1
     if args.command == "new-module":
         payload = scaffold_module(args.name, getattr(args, "dir", "."))
-        print(json.dumps(payload, indent=2))
+        _emit("new-module", payload, args)
         return 0 if payload["ok"] else 1
     return 2
 

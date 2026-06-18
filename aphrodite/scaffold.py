@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +39,7 @@ def handle(action: str, payload: list[str], context: dict[str, Any]) -> dict[str
     """
     if action == "ping":
         return {"ok": True, "action": action, "message": "__NAME__ is alive"}
-    return {"ok": False, "action": action, "error": f"unknown action: {action}"}
+    return {"ok": False, "error": f"unknown action: {action}", "supported_actions": ["ping"], "examples": [f"aphrodite dispatch-test __NAME__:v1:ping"]}
 '''
 
 PYPROJECT_TEMPLATE = '''[build-system]
@@ -66,7 +67,7 @@ Aphrodite and is discovered through the `aphrodite.adapters` entry point.
 
 ## Try it
 
-1. `pip install -e .` into the same environment as Aphrodite
+1. Run the install command printed by `aphrodite new-module` so the adapter installs into Aphrodite's Python environment (`<aphrodite-python> -m pip install -e .`)
 2. `export APHRODITE_MODULES=__NAME__`
 3. `aphrodite dispatch-test __NAME__:v1:ping`
 
@@ -114,7 +115,7 @@ def scaffold_module(name: str, dest: str | Path = ".") -> dict[str, Any]:
         "path": str(target),
         "created": created,
         "next_steps": [
-            f"pip install -e {target}",
+            f"{sys.executable} -m pip install -e {target}",
             f"export APHRODITE_MODULES={name}",
             f"export APHRODITE_MODULES=image_gen,skillopt,acp_relay,{name}  # keep Aphrodite's defaults too",
             f"aphrodite dispatch-test {name}:v1:ping",

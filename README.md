@@ -14,10 +14,11 @@ Hermes = the external local agent runtime Aphrodite never patches.
 MCP = Model Context Protocol stdio server for tool clients.
 ACP = Agent Client Protocol relay for conversations.
 
-## Start here (local in 5 commands)
+## Start here (local in 6 commands)
 
 ```bash
 curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Advenaa/aphrodite/main/install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
 aphrodite serve &
 curl --retry 20 --retry-delay 1 --retry-connrefused -fsS http://127.0.0.1:9079/health
 aphrodite new-module demo

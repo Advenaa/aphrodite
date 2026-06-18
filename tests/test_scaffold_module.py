@@ -27,12 +27,13 @@ def test_scaffold_module_creates_adapter_package(tmp_path):
     assert (target / "README.md").exists()
     assert 'my_module = "my_module:handle"' in (target / "pyproject.toml").read_text(encoding="utf-8")
     assert payload["next_steps"] == [
-        f"pip install -e {target}",
+        f"{sys.executable} -m pip install -e {target}",
         "export APHRODITE_MODULES=my_module",
         "export APHRODITE_MODULES=image_gen,skillopt,acp_relay,my_module  # keep Aphrodite's defaults too",
         "aphrodite dispatch-test my_module:v1:ping",
     ]
     readme = (target / "README.md").read_text(encoding="utf-8")
+    assert "`<aphrodite-python> -m pip install -e .`" in readme
     assert "`export APHRODITE_MODULES=my_module`" in readme
     assert '"result": {"ok": true, "action": "ping", "message": "my_module is alive"}' in readme
 
@@ -46,7 +47,11 @@ def test_generated_adapter_handle_ping_and_unknown_action(tmp_path):
     ping = module.handle("ping", [], {})
     assert ping["ok"] is True
     assert ping["message"] == "my_module is alive"
-    assert module.handle("nope", [], {})["ok"] is False
+    unknown = module.handle("nope", [], {})
+    assert unknown["ok"] is False
+    assert unknown["error"] == "unknown action: nope"
+    assert unknown["supported_actions"] == ["ping"]
+    assert unknown["examples"] == ["aphrodite dispatch-test my_module:v1:ping"]
 
 
 def test_new_module_cli_creates_adapter_package(tmp_path, monkeypatch):

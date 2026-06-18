@@ -86,3 +86,92 @@ def test_dispatch_test_exit_reflects_router_and_handler_success(monkeypatch, cap
     assert cli.main(["dispatch-test", "unknown:v1:ping"]) == 1
     failing_payload = json.loads(capsys.readouterr().out)
     assert failing_payload["ok"] is False
+
+
+def test_render_modules_missing_shows_next():
+    from aphrodite.render import render
+
+    output = render(
+        "modules",
+        {
+            "ok": False,
+            "active": ["skillopt"],
+            "missing": ["image_gen"],
+            "available": ["acp_relay"],
+            "hint": "pip install -e <your-module-dir>",
+        },
+    )
+
+    assert "Active: skillopt" in output
+    assert "Missing: image_gen" in output
+    assert "Available: acp_relay" in output
+    assert "NEXT: pip install -e <your-module-dir>" in output
+
+
+def test_render_dispatch_failure_shows_next():
+    from aphrodite.render import render
+
+    output = render(
+        "dispatch-test",
+        {
+            "ok": False,
+            "error": "unknown system",
+            "known_systems": ["skillopt", "image_gen"],
+        },
+    )
+
+    assert "FAIL: unknown system" in output
+    assert "NEXT: skillopt, image_gen" in output
+
+
+def test_render_doctor_attention_shows_fix():
+    from aphrodite.render import render
+
+    output = render(
+        "doctor",
+        {
+            "ok": False,
+            "warnings": ["configuration warning"],
+            "env": {
+                "APHRODITE_DISCORD_PUBLIC_KEY": {
+                    "configured": False,
+                    "fix": "set APHRODITE_DISCORD_PUBLIC_KEY",
+                }
+            },
+        },
+    )
+
+    assert "NEEDS ATTENTION" in output
+    assert "- configuration warning" in output
+    assert "- APHRODITE_DISCORD_PUBLIC_KEY: set APHRODITE_DISCORD_PUBLIC_KEY" in output
+    assert "NEXT: set APHRODITE_DISCORD_PUBLIC_KEY" in output
+
+
+def test_render_health_ok():
+    from aphrodite.render import render
+
+    output = render("health", {"ok": True, "version": "1.2.3", "modules": ["skillopt", "image_gen"]})
+
+    assert output == "Aphrodite OK — v1.2.3, modules: skillopt, image_gen"
+
+
+def test_modules_json_flag_prints_json(monkeypatch, capsys):
+    import aphrodite.cli as cli
+
+    monkeypatch.setattr(cli, "maybe_notify_update", lambda command: None)
+    monkeypatch.setattr(
+        cli,
+        "modules_payload",
+        lambda: {
+            "ok": True,
+            "configured": ["skillopt"],
+            "discovered": ["skillopt"],
+            "active": ["skillopt"],
+            "missing": [],
+            "available": [],
+            "hint": "All configured modules are installed.",
+        },
+    )
+
+    assert cli.main(["modules", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["active"] == ["skillopt"]

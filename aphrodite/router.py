@@ -46,7 +46,7 @@ class DispatchRouter:
         try:
             parsed = parse_custom_id(custom_id)
         except ValueError as exc:
-            return {"ok": False, "error": str(exc), "custom_id": custom_id}
+            return {"ok": False, "error": str(exc), "custom_id": custom_id, "example": "image_gen:v1:status"}
         handler = self._handlers.get(parsed.system)
         if handler is None:
             return {

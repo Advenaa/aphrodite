@@ -39,6 +39,15 @@ def test_unknown_system_reports_known_systems_and_fix():
     assert result["fix"] == "Set APHRODITE_MODULES to include this system, or install its adapter package; run `aphrodite modules` to see what is discovered."
 
 
+def test_malformed_custom_id_includes_example():
+    from aphrodite.router import DispatchRouter
+
+    result = DispatchRouter().dispatch("not-enough")
+
+    assert result["ok"] is False
+    assert result["error"] == "custom_id must be '<system>:<version>:<action>[:payload...]'"
+    assert result["example"] == "image_gen:v1:status"
+
 def test_unsupported_version_includes_dispatch_example():
     from aphrodite.router import DispatchRouter
 

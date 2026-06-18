@@ -44,17 +44,24 @@ The quickest path is to let Aphrodite scaffold the package:
 
 ```bash
 aphrodite new-module my_module
-pip install -e my_module
+~/.local/share/aphrodite/venv/bin/python -m pip install -e my_module
 export APHRODITE_MODULES=my_module
+aphrodite modules
 aphrodite dispatch-test my_module:v1:ping
 ```
 
+**Important:** install adapters into the same Python environment Aphrodite runs
+in, or discovery will not find them. The `new-module` next steps print the
+exact `.../python -m pip install -e ...` command for your environment; after
+the one-line installer, manual installs can use
+`~/.local/share/aphrodite/venv/bin/python -m pip install -e <module>`. Run
+`aphrodite modules` afterward to confirm the adapter is active.
+
 `aphrodite new-module my_module` creates a ready-to-edit `my_module/` folder
 with `my_module.py`, `pyproject.toml`, and a README. The generated package
-publishes an `aphrodite.adapters` entry point, so Aphrodite discovers it after
-you install it into the same environment and list `my_module` in
-`APHRODITE_MODULES`. Use `examples/hello_adapter/` as a copy-paste worked
-reference when you want to compare the scaffold with a complete tiny adapter.
+publishes an `aphrodite.adapters` entry point; use
+`examples/hello_adapter/` as a copy-paste worked reference when you want to
+compare the scaffold with a complete tiny adapter.
 
 ## Edit & debug loop
 
@@ -74,8 +81,9 @@ Then reinstall the package into the same environment Aphrodite uses and dispatch
 one custom id:
 
 ```bash
-pip install -e my_module
+~/.local/share/aphrodite/venv/bin/python -m pip install -e my_module
 export APHRODITE_MODULES=my_module
+aphrodite modules
 aphrodite dispatch-test my_module:v1:echo:hello
 ```
 
@@ -102,9 +110,9 @@ and adapter results with `"ok": false` both make the command fail.
 ## Troubleshooting
 
 If dispatch shows `ok: false` with an error that the module adapter is
-configured but not installed, you forgot `pip install -e` in the environment
-running Aphrodite. Run `aphrodite modules` to compare configured, discovered,
-active, missing, and available adapters.
+configured but not installed, you likely installed it into a different Python
+environment than the one running Aphrodite. Run `aphrodite modules` to compare
+configured, discovered, active, missing, and available adapters.
 
 To wire an adapter by hand:
 
@@ -125,10 +133,11 @@ def handle(action: str, payload: list[str], context: dict[str, Any]) -> dict[str
 my_adapter = "your_pkg.your_module:handle"
 ```
 
-3. Reinstall the package so Python refreshes the entry-point metadata:
+3. Reinstall the package so Python refreshes the entry-point metadata, using the
+   interpreter that runs Aphrodite:
 
 ```bash
-pip install -e .
+~/.local/share/aphrodite/venv/bin/python -m pip install -e .
 ```
 
 4. Add the adapter name to `APHRODITE_MODULES` when it should be active. A
