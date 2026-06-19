@@ -17,7 +17,7 @@ ACP = Agent Client Protocol relay for conversations.
 ## Start here (local in 6 commands)
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Advenaa/aphrodite/main/install.sh | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Frens-Pods/aphrodite/main/install.sh | bash
 export PATH="$HOME/.local/bin:$PATH"
 aphrodite serve &
 curl --retry 20 --retry-delay 1 --retry-connrefused -fsS http://127.0.0.1:9079/health
@@ -60,15 +60,15 @@ starter in `examples/hello_adapter/`; full details live in
 Install from GitHub (no clone needed):
 
 ```bash
-pip install "git+https://github.com/Advenaa/aphrodite"
+pip install "git+https://github.com/Frens-Pods/aphrodite"
 # with optional extras (MCP server, ACP relay transport):
-pip install "aphrodite-sidecar[mcp,acp] @ git+https://github.com/Advenaa/aphrodite"
+pip install "aphrodite-sidecar[mcp,acp] @ git+https://github.com/Frens-Pods/aphrodite"
 ```
 
 Or from a clone:
 
 ```bash
-git clone https://github.com/Advenaa/aphrodite && cd aphrodite
+git clone https://github.com/Frens-Pods/aphrodite && cd aphrodite
 python3 -m venv .venv && . .venv/bin/activate
 .venv/bin/python -m pip install .                  # users
 .venv/bin/python -m pip install -e ".[dev]"        # contributors (editable + test deps)
@@ -81,7 +81,7 @@ Requires Python 3.10+. Runtime dependencies: `fastapi`, `pynacl`, `uvicorn`. Ext
 Use the same one-line installer for first installs and later updates:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Advenaa/aphrodite/main/install.sh | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Frens-Pods/aphrodite/main/install.sh | bash
 ```
 
 From an existing install:
@@ -98,7 +98,7 @@ Aphrodite shows a daily update notice in interactive terminals. Disable it with
 Manual fallback:
 
 ```bash
-pip install --upgrade "aphrodite-sidecar[mcp,acp] @ git+https://github.com/Advenaa/aphrodite"
+pip install --upgrade "aphrodite-sidecar[mcp,acp] @ git+https://github.com/Frens-Pods/aphrodite"
 ```
 
 ## Quickstart
@@ -140,7 +140,7 @@ The `aphrodite` console script (and `.venv/bin/python scripts/aphrodite` from a 
 Aphrodite ships an optional [MCP](https://modelcontextprotocol.io) server exposing the review-gated SkillOpt tools plus read-only image_gen and acp_relay metadata over stdio. It requires the `mcp` extra:
 
 ```bash
-.venv/bin/python -m pip install "aphrodite-sidecar[mcp] @ git+https://github.com/Advenaa/aphrodite"
+.venv/bin/python -m pip install "aphrodite-sidecar[mcp] @ git+https://github.com/Frens-Pods/aphrodite"
 .venv/bin/python -m aphrodite.mcp_server      # stdio transport from a clone
 ```
 

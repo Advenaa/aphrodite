@@ -17,8 +17,8 @@ from typing import Any
 
 from . import __version__
 
-INSTALL_SOURCE = "git+https://github.com/Advenaa/aphrodite"  # Flip to "aphrodite-sidecar" after PyPI publish.
-GITHUB_RELEASES_URL = "https://api.github.com/repos/Advenaa/aphrodite/releases/latest"
+INSTALL_SOURCE = "git+https://github.com/Frens-Pods/aphrodite"  # Flip to "aphrodite-sidecar" after PyPI publish.
+GITHUB_RELEASES_URL = "https://api.github.com/repos/Frens-Pods/aphrodite/releases/latest"
 PACKAGE = "aphrodite-sidecar"
 _CACHE_TTL_SECONDS = 24 * 60 * 60
 _UPDATE_COMMANDS = {"update", "version"}

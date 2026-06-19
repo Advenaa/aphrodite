@@ -37,7 +37,7 @@ main() {
   local BIN="$BIN_DIR/aphrodite"
   local CONFIG_DIR="$HOME/.config/aphrodite"
   local CACHE_DIR="$HOME/.cache/aphrodite"
-  local PACKAGE_SPEC="aphrodite-sidecar[mcp,acp] @ git+https://github.com/Advenaa/aphrodite"
+  local PACKAGE_SPEC="aphrodite-sidecar[mcp,acp] @ git+https://github.com/Frens-Pods/aphrodite"
 
   mkdir -p "$INSTALL_ROOT" "$BIN_DIR" "$CONFIG_DIR" "$CACHE_DIR"
 
