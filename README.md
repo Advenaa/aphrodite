@@ -14,7 +14,37 @@ Hermes = the external local agent runtime Aphrodite never patches.
 MCP = Model Context Protocol stdio server for tool clients.
 ACP = Agent Client Protocol relay for conversations.
 
-## Start here (local in 6 commands)
+## Start here (Hermes users)
+
+Paste this into Hermes:
+
+```text
+Install Aphrodite as a Hermes sidecar plugin backend. Do not modify Hermes core.
+
+Run:
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Frens-Pods/aphrodite/main/install.sh | bash
+
+Then run the setup command printed by the installer:
+aphrodite easysetup --json
+If the installer says Aphrodite is not on PATH yet, use the absolute shim path it prints instead.
+Register the returned `mcp_config.mcp_servers.aphrodite` entry for this Hermes profile. Its "command" must stay the exact absolute Python interpreter path printed by Aphrodite. Do not replace it with `$HOME`, a guessed install path, or a literal "~". Keep args ["-m", "aphrodite.mcp_server"].
+
+Plugin/module model:
+- Hermes stays the agent runtime.
+- Aphrodite exposes MCP, HTTP, Discord, and module-adapter backend surfaces.
+- Add Aphrodite modules with `aphrodite new-module my_plugin`, install into Aphrodite's Python environment, then enable with `APHRODITE_MODULES=+my_plugin`.
+- Keep the leading + to append your module without replacing built-ins.
+
+Restart this Hermes session/profile, then verify:
+aphrodite doctor
+aphrodite modules
+aphrodite serve
+```
+
+After install, `aphrodite easysetup` prints the same paste-ready Hermes prompt
+and exact MCP JSON for your machine.
+
+### Manual local quickstart
 
 ```bash
 curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Frens-Pods/aphrodite/main/install.sh | bash
@@ -151,6 +181,7 @@ The `aphrodite` console script (and `.venv/bin/python scripts/aphrodite` from a 
 | `run --adapter PATH` | Dev-run a local adapter package from a path without installing it first. |
 | `health` | Print the health payload. |
 | `doctor` | Report required files, env, MCP and service readiness. |
+| `easysetup [--json]` | Print paste-ready Hermes MCP setup guidance using Aphrodite's absolute Python path. |
 | `preflight [--production]` | Report whether the service is ready to activate, without starting it. |
 | `endpoint-preflight` | Read-only readiness for the public Discord interaction endpoint. |
 | `dispatch-test <custom_id>` | Dispatch a custom id through the configured router; exits nonzero when routing or handler `result.ok` fails. |
@@ -166,20 +197,29 @@ Aphrodite ships an optional [MCP](https://modelcontextprotocol.io) server exposi
 .venv/bin/python -m aphrodite.mcp_server      # stdio transport from a clone
 ```
 
-Register it with an MCP client by pointing the client at your venv's Python:
+For Hermes, prefer the machine-specific setup output:
+
+```bash
+aphrodite easysetup
+aphrodite easysetup --json
+```
+
+The JSON payload includes `mcp_config` shaped for Hermes:
 
 ```json
 {
-  "mcpServers": {
+  "mcp_servers": {
     "aphrodite": {
-      "command": "/path/to/.venv/bin/python",
+      "command": "/absolute/path/to/python",
       "args": ["-m", "aphrodite.mcp_server"]
     }
   }
 }
 ```
 
-For the Hermes agent, add the same entry under `mcp_servers.aphrodite` in the relevant Hermes profile config and start a fresh Hermes process. Run `aphrodite doctor` to confirm MCP readiness.
+The `command` must be an absolute interpreter path from Aphrodite's environment;
+do not use a literal `~`. Start a fresh Hermes session/profile after registering
+it, then run `aphrodite doctor` to confirm MCP readiness.
 
 ## Configuration
 

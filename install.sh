@@ -67,14 +67,16 @@ main() {
   echo "Aphrodite is ready."
   case ":$PATH:" in
     *":$BIN_DIR:"*)
-      echo "Next: aphrodite serve"
-      echo "Then: aphrodite doctor"
+      echo "Next: aphrodite easysetup"
+      echo "Then: aphrodite serve"
+      echo "Check: aphrodite doctor"
       ;;
     *)
       echo "Note: $BIN_DIR is not on your PATH yet." >&2
       echo "Add this to your shell profile:" >&2
       echo "  export PATH=\"$BIN_DIR:\$PATH\"" >&2
       echo "Works right now:" >&2
+      echo "  \"$BIN\" easysetup" >&2
       echo "  \"$BIN\" serve" >&2
       echo "  \"$BIN\" doctor" >&2
       ;;

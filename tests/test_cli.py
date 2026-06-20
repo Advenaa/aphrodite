@@ -173,3 +173,39 @@ def test_modules_json_flag_prints_json(monkeypatch, capsys):
     raw = capsys.readouterr().out
     assert raw == json.dumps(inventory, indent=2) + "\n"
     assert json.loads(raw)["active"] == ["skillopt"]
+
+
+def test_easysetup_cli_prints_copy_paste_prompt(monkeypatch, capsys):
+    import aphrodite.cli as cli
+    import aphrodite.easysetup as easysetup
+
+    monkeypatch.setattr(cli, "maybe_notify_update", lambda command: None)
+    monkeypatch.setattr(easysetup.sys, "executable", "/opt/aphrodite/venv/bin/python")
+
+    assert cli.main(["easysetup"]) == 0
+
+    raw = capsys.readouterr().out
+    assert not raw.lstrip().startswith("{")
+    assert "https://raw.githubusercontent.com/Frens-Pods/aphrodite/main/install.sh" in raw
+    assert "~/.local" not in raw
+    assert "/opt/aphrodite/venv/bin/python" in raw
+    assert "Hermes sidecar plugin backend" in raw
+    assert "APHRODITE_MODULES=+my_plugin" in raw
+    assert "Keep the leading +" in raw
+
+
+def test_easysetup_json_prints_mcp_payload(monkeypatch, capsys):
+    import aphrodite.cli as cli
+    import aphrodite.easysetup as easysetup
+
+    monkeypatch.setattr(cli, "maybe_notify_update", lambda command: None)
+    monkeypatch.setattr(easysetup.sys, "executable", "/opt/aphrodite/venv/bin/python")
+
+    assert cli.main(["easysetup", "--json"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    server = payload["mcp_config"]["mcp_servers"]["aphrodite"]
+    assert server["command"] == "/opt/aphrodite/venv/bin/python"
+    assert server["args"] == ["-m", "aphrodite.mcp_server"]
+    assert payload["mcp_servers"]["aphrodite"]["args"] == ["-m", "aphrodite.mcp_server"]
+    assert payload["prompt"]

@@ -13,6 +13,7 @@ from .readiness import production_endpoint_preflight
 from .scaffold import scaffold_module
 from .serve import run_adapter_dev, run_server
 from .update import maybe_notify_update, update_payload, version_payload
+from .easysetup import build_hermes_prompt, easysetup_payload
 
 
 def _emit(command: str, payload: dict, args: argparse.Namespace) -> None:
@@ -35,6 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("doctor", parents=[common])
     sub.add_parser("endpoint-preflight", parents=[common])
     sub.add_parser("version", parents=[common])
+    sub.add_parser("easysetup", parents=[common])
     update = sub.add_parser("update", parents=[common])
     update.add_argument("--check", action="store_true")
     preflight = sub.add_parser("preflight", parents=[common])
@@ -103,6 +105,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if payload["ok"] and payload.get("result", {}).get("ok", True) else 1
     if args.command == "version":
         _emit("version", version_payload(), args)
+        return 0
+    if args.command == "easysetup":
+        if getattr(args, "json", False):
+            print(json.dumps(easysetup_payload(), indent=2))
+        else:
+            print(build_hermes_prompt())
         return 0
     if args.command == "update":
         payload = update_payload(check=bool(getattr(args, "check", False)))
