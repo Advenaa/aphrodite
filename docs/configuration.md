@@ -24,6 +24,14 @@ cp config/aphrodite.env.example config/aphrodite.env
 | `HERMES_HOME` | `~/.hermes` | `aphrodite.config`, `aphrodite.paths` | Locates the external Hermes home. If it points at `<root>/profiles/<name>`, `hermes_root()` collapses to `<root>` for shared plugin discovery. |
 | `APHRODITE_PUBLIC_BASE_URL` | none | readiness/preflight helpers | Public HTTPS origin for endpoint preflight. Do not include `/discord/interactions`; Aphrodite appends that path when checking the Discord endpoint. |
 
+## Adapter extension settings
+
+| Variable | Default | Used by | Purpose |
+| --- | --- | --- | --- |
+| `APHRODITE_ADAPTER_AUTH_TOKEN` | none | `aphrodite.app.create_app` | Bearer token required by discovered adapter HTTP routers when `requires_auth` is true. Auth-required routes fail closed with `503` when unset; requests must send `Authorization: Bearer <token>` when set. |
+| `APHRODITE_TRUSTED_ADAPTERS` | none | adapter discovery, `aphrodite doctor`, `aphrodite modules` | Comma-separated allowlist of third-party adapter entry-point names that may load. Use with `APHRODITE_MODULES=+name` to enable only trusted installed adapters; untrusted/configured adapters are surfaced by diagnostics instead of silently loading. |
+| `APHRODITE_ADAPTER_LIFESPAN_TIMEOUT` | `30` | adapter lifespan runner | Per-adapter startup/shutdown timeout in seconds. Lifespan failures and timeouts are isolated and reported so one adapter does not take down unrelated adapters. |
+
 ## Discord interaction and authorization settings
 
 | Variable | Default | Used by | Purpose |
