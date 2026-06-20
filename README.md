@@ -42,17 +42,38 @@ when you are done.
   handler instead of breaking startup.
 - **Operator-readiness surfaces**: `/health`, `/status`, a `doctor` command,
   and read-only deployment preflight checks.
-- **Optional MCP server** (`aphrodite/mcp_server.py`) exposing skillopt tools
-  over stdio.
+- **Optional MCP server** (`aphrodite/mcp_server.py`) exposing SkillOpt tools
+  plus discovered adapter inventory and dispatch over stdio.
 
 If you see references to `nudge`/`readsurface`/`soulglass`/`kanban`/`nixie`, those are operator-private adapters; public users do not need them — unknown configured names become harmless placeholders (see `aphrodite modules`).
 
-### Write your own module
+## Extending Aphrodite
 
-Modules are ordinary Python plugins discovered through the
-`aphrodite.adapters` entry point, so you can add one without editing Aphrodite
-core. Start fastest with `aphrodite new-module <name>`, or copy the worked
-starter in `examples/hello_adapter/`; full details live in
+Module adapters are ordinary Python plugins discovered through the
+`aphrodite.adapters` entry-point group. Each discovered entry becomes a typed
+`AdapterSpec` with a dispatch `handle`, optional FastAPI `router`, optional
+metadata/readiness/lifespan hooks, supported custom-id versions, capabilities,
+and auth policy.
+
+Start fastest with `aphrodite new-module <name>`, which scaffolds a package with
+the entry point already declared. During development, use
+`aphrodite run --adapter <path>` to run a local adapter package directly without
+installing it first. For hand-written adapters, import the small authoring kit
+from `aphrodite.sdk` (`AdapterSpec`, handler types, `ok()`/`err()`, path helpers)
+and test with `aphrodite.testing` (`dispatch_once`, `make_adapter_app`,
+`make_adapter_client`, `assert_result_ok`).
+
+Adapters may expose HTTP routes by returning or exporting a `router`; Aphrodite
+mounts that router under `/<system>`. Routes require
+`Authorization: Bearer $APHRODITE_ADAPTER_AUTH_TOKEN` by default and fail closed
+when the token is not configured. Set `requires_auth=False` only for routes that
+are intentionally public. Discovered adapters are also reachable through the
+MCP server's adapter tools.
+
+Enable installed adapters with `APHRODITE_MODULES=+name`; the leading `+`
+appends to the bundled trio instead of replacing them. Use
+`APHRODITE_TRUSTED_ADAPTERS` as the supply-chain allowlist for third-party
+entry points. Full details live in
 [`docs/module-adapters.md`](docs/module-adapters.md).
 
 ## Install
@@ -127,6 +148,7 @@ The `aphrodite` console script (and `.venv/bin/python scripts/aphrodite` from a 
 | `serve [--host H] [--port P] [--reload]` | Start the FastAPI service using config defaults unless overridden. |
 | `modules` | Print configured, discovered, active, missing, and available module adapters. |
 | `new-module <name> [--dir DIR]` | Scaffold a ready-to-edit third-party module adapter package. |
+| `run --adapter PATH` | Dev-run a local adapter package from a path without installing it first. |
 | `health` | Print the health payload. |
 | `doctor` | Report required files, env, MCP and service readiness. |
 | `preflight [--production]` | Report whether the service is ready to activate, without starting it. |
@@ -137,7 +159,7 @@ The `aphrodite` console script (and `.venv/bin/python scripts/aphrodite` from a 
 
 ## MCP server
 
-Aphrodite ships an optional [MCP](https://modelcontextprotocol.io) server exposing the review-gated SkillOpt tools plus read-only image_gen and acp_relay metadata over stdio. It requires the `mcp` extra:
+Aphrodite ships an optional [MCP](https://modelcontextprotocol.io) server exposing the review-gated SkillOpt tools plus discovered adapter inventory and dispatch over stdio. It requires the `mcp` extra:
 
 ```bash
 .venv/bin/python -m pip install "aphrodite-sidecar[mcp] @ git+https://github.com/Frens-Pods/aphrodite"

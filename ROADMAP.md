@@ -12,10 +12,21 @@ and is intentionally out of scope here.
 
 The dispatch core, Discord interaction verification, bundled module adapters,
 discovery-based adapter registration, deployment examples, and optional MCP
-server are implemented and covered by the test suite. Adapters are discovered
-via the `aphrodite.adapters` entry-point group; deployment examples cover Docker
-and bare-metal; and the MCP server covers `skillopt` plus read-only `image_gen`
-and `acp_relay` metadata. The project is pre-1.0; interfaces may still change.
+server are implemented and covered by the test suite. The adapter system is now
+extensible: third-party packages publish a typed `AdapterSpec` through the
+`aphrodite.adapters` entry-point group; optional routers mount under
+`/<system>` behind adapter bearer auth by default; per-adapter lifespans run
+with timeout and failure isolation; `aphrodite.sdk` and `aphrodite.testing`
+provide the authoring and test kit; `aphrodite new-module` scaffolds packages;
+`aphrodite run --adapter` dev-runs local adapters without installation; MCP
+tools can dispatch to discovered adapters; `APHRODITE_TRUSTED_ADAPTERS` gates
+third-party entry-point loading; and `modules`/`doctor` surface load, lint,
+mount, lifespan, and dependency failures loudly. Deployment examples cover
+Docker and bare-metal. The project is pre-1.0; interfaces may still change.
+
+A STABLE public API surface — including a `py.typed` marker and curated
+package-level `__all__` — is intentionally deferred until the 1.0 interface
+freeze by operator decision, consistent with the current pre-1.0 stance.
 
 ## Module adapters
 

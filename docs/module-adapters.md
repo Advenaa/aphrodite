@@ -22,7 +22,7 @@ A successful dispatch response includes `ok`, `system`, `version`, `action`, `pa
 
 ## Bundled adapters
 
-`aphrodite.app.build_router()` discovers dispatch handlers published under the
+`aphrodite.app.build_router()` discovers adapter specs published under the
 `aphrodite.adapters` entry-point group, then registers the configured names from
 `APHRODITE_MODULES`. The default public set is `image_gen,skillopt,acp_relay`.
 
@@ -39,17 +39,59 @@ built-in modules; a bare list replaces them — use bare only to intentionally
 reduce the set. Each system name must match an entry-point name. Unknown names
 fall back to a placeholder handler so startup remains deterministic.
 
+## Adapter contract
+
+Aphrodite discovers third-party adapters from the `aphrodite.adapters` Python
+entry-point group. The entry-point name is the dispatch `system` name, and the
+loaded value may be either:
+
+- a bare `handle(action, payload, context)` callable; or
+- a module/object exposing `handle` plus optional adapter attributes.
+
+Discovery normalizes both forms into an `AdapterSpec`:
+
+| Field | Required | Purpose |
+| --- | --- | --- |
+| `system` | yes | System name selected by `system:v1:action` custom IDs and used as the HTTP mount path. |
+| `handle` | yes | Dispatch callable receiving `action: str`, `payload: list[str]`, and `context: dict[str, Any]`. |
+| `router` | optional | FastAPI `APIRouter` mounted by `create_app()` under `/<system>`. |
+| `metadata` | optional | Human/operator metadata surfaced by inventory and health tooling. |
+| `readiness` | optional | Callable used by health/doctor surfaces to report adapter readiness. |
+| `lifespan` | optional | Async context manager or lifespan callable run at app startup/shutdown with isolation. |
+| `api_version` | optional | Adapter contract version advertised by inventory tooling. |
+| `capabilities` | optional | Capability strings for humans and MCP clients. |
+| `supported_versions` | optional | Custom-id versions the adapter supports; default behavior includes `v1`. |
+| `requires_auth` | optional | Whether contributed HTTP routes require adapter bearer auth; defaults to `True`. |
+| `source` | optional | Origin information for diagnostics. |
+
+Return dictionaries in the canonical result dialect:
+
+```python
+{"ok": True, "message": "done"}
+{"ok": False, "error": "what failed"}
+```
+
+The dispatch wrapper adds `system`, `version`, `action`, `payload`, and
+`result`. Router failures, unsupported versions, unknown systems, and adapter
+exceptions return structured `ok: false` responses instead of escaping through
+the HTTP boundary.
+
 ## Adding an adapter
 
 The quickest path is to let Aphrodite scaffold the package:
 
 ```bash
 aphrodite new-module my_module
-~/.local/share/aphrodite/venv/bin/python -m pip install -e my_module
 export APHRODITE_MODULES=+my_module  # leading + appends to the built-in modules; a bare list replaces them — use bare only to intentionally reduce the set
 aphrodite modules
 aphrodite dispatch-test my_module:v1:ping
 ```
+
+`aphrodite new-module my_module` creates a ready-to-edit `my_module/` folder
+with `my_module.py`, `pyproject.toml`, generated tests, and next-step commands.
+The generated package publishes an `aphrodite.adapters` entry point; use
+`examples/hello_adapter/` as a copy-paste worked reference when you want to
+compare the scaffold with a complete tiny adapter.
 
 **Important:** install adapters into the same Python environment Aphrodite runs
 in, or discovery will not find them. The `new-module` next steps print the
@@ -58,11 +100,192 @@ the one-line installer, manual installs can use
 `~/.local/share/aphrodite/venv/bin/python -m pip install -e <module>`. Run
 `aphrodite modules` afterward to confirm the adapter is active.
 
-`aphrodite new-module my_module` creates a ready-to-edit `my_module/` folder
-with `my_module.py`, `pyproject.toml`, and a README. The generated package
-publishes an `aphrodite.adapters` entry point; use
-`examples/hello_adapter/` as a copy-paste worked reference when you want to
-compare the scaffold with a complete tiny adapter.
+Custom modules can be enabled by appending their system names with
+`APHRODITE_MODULES=+name`; the leading + appends to the built-in modules; a bare
+list replaces them — use bare only to intentionally reduce the set. Each system
+name must match an entry-point name. Unknown names fall back to a placeholder
+handler so startup remains deterministic.
+
+## Entry points: bare callable or module object
+
+For a dispatch-only adapter, point the entry point directly at a callable:
+
+```toml
+[project.entry-points."aphrodite.adapters"]
+my_adapter = "your_pkg.your_module:handle"
+```
+
+```python
+from typing import Any
+
+from aphrodite.sdk import err, ok
+
+
+def handle(action: str, payload: list[str], context: dict[str, Any]) -> dict[str, Any]:
+    if action == "ping":
+        return ok(action=action, message="my_adapter is alive")
+    if action == "echo":
+        return ok(action=action, echo=payload[0] if payload else "")
+    return err(f"unknown action: {action}", action=action)
+```
+
+For richer adapters, point the entry point at a module/object and export
+optional attributes next to `handle`:
+
+```toml
+[project.entry-points."aphrodite.adapters"]
+my_adapter = "your_pkg.your_module"
+```
+
+```python
+from contextlib import asynccontextmanager
+from typing import Any
+
+from fastapi import APIRouter
+
+from aphrodite.sdk import err, ok
+
+router = APIRouter()
+metadata = {"description": "example adapter"}
+capabilities = ("dispatch", "http")
+supported_versions = ("v1",)
+requires_auth = True
+
+
+def handle(action: str, payload: list[str], context: dict[str, Any]) -> dict[str, Any]:
+    if action == "ping":
+        return ok(message="pong")
+    return err(f"unknown action: {action}")
+
+
+@router.get("/hello")
+def hello() -> dict[str, Any]:
+    return ok(message="hello from my_adapter")
+
+
+def readiness() -> dict[str, Any]:
+    return ok(ready=True)
+
+
+@asynccontextmanager
+async def lifespan(app):
+    yield
+```
+
+## HTTP routes and auth
+
+When an adapter exposes `router`, `create_app()` mounts it under `/<system>`.
+For the example above, `GET /my_adapter/hello` reaches the contributed route.
+
+Adapter HTTP routes require `Authorization: Bearer
+$APHRODITE_ADAPTER_AUTH_TOKEN` by default. If a route should be public, export
+`requires_auth = False` from the module/object or provide an `AdapterSpec` with
+`requires_auth=False`. Keep that opt-out rare and explicit: the default fails
+closed with `503` when auth is required but `APHRODITE_ADAPTER_AUTH_TOKEN` is
+unset.
+
+Mount failures are quarantined in `app.state.adapter_quarantine` so one broken
+adapter does not prevent the service from starting. `aphrodite modules` and
+`aphrodite doctor` surface load, lint, mount, lifespan, and dependency issues.
+
+## Lifespan hooks
+
+Adapters may export `lifespan` for startup/shutdown work such as opening pools,
+warming caches, or validating external dependencies. Each adapter lifespan runs
+with failure isolation and the timeout from
+`APHRODITE_ADAPTER_LIFESPAN_TIMEOUT` (default `30` seconds). A failing or timed
+out lifespan quarantines that adapter's lifecycle failure instead of taking down
+unrelated adapters.
+
+## SDK and testing kit
+
+Use `aphrodite.sdk` for the public authoring helpers:
+
+- `AdapterSpec` and handler types for explicit contracts.
+- `ok()` and `err()` for canonical result dictionaries.
+- path helpers that match Aphrodite's runtime layout.
+
+Use `aphrodite.testing` for local tests:
+
+- `dispatch_once(...)` to exercise one custom-id dispatch.
+- `make_adapter_app(...)` to build a FastAPI app around an adapter.
+- `make_adapter_client(...)` to call contributed routes in-process.
+- `assert_result_ok(...)` to assert canonical success results.
+
+## Dev-runner
+
+During development, run a local adapter without installing it first:
+
+```bash
+aphrodite run --adapter ./my_module
+```
+
+The dev-runner loads the adapter from the supplied path and serves it through
+the same app factory path as installed adapters, so dispatch, router mounting,
+auth, lifespan isolation, and diagnostics match normal runtime behavior.
+
+## Supply-chain allowlist
+
+Set `APHRODITE_TRUSTED_ADAPTERS` to a comma-separated list of entry-point names
+that are allowed to load. Use it for production or shared environments where
+third-party packages may be installed in the same Python environment. Keep the
+list aligned with `APHRODITE_MODULES`; configured-but-untrusted adapters are
+reported by inventory/doctor surfaces instead of silently loading.
+
+## MCP reachability
+
+When the optional MCP server is installed, discovered adapters are reachable
+through the `aphrodite_adapters` inventory tool and the `aphrodite_dispatch`
+tool. MCP clients see the same configured adapter set and the same canonical
+success/failure result dialect as HTTP and CLI dispatch.
+
+## End-to-end tutorial: scaffold, add a route, run locally
+
+1. Scaffold an adapter:
+
+```bash
+aphrodite new-module hello_adapter
+```
+
+2. In the generated module, add a router:
+
+```python
+from typing import Any
+
+from fastapi import APIRouter
+
+from aphrodite.sdk import ok
+
+router = APIRouter()
+
+
+@router.get("/hello")
+def hello() -> dict[str, Any]:
+    return ok(message="hello")
+```
+
+3. Run the adapter from its path without installing it:
+
+```bash
+export APHRODITE_MODULES=+hello_adapter
+export APHRODITE_TRUSTED_ADAPTERS=hello_adapter
+export APHRODITE_ADAPTER_AUTH_TOKEN=dev-secret
+aphrodite run --adapter ./hello_adapter
+```
+
+4. Hit the contributed route with the bearer token:
+
+```bash
+curl -fsS \
+  -H "Authorization: Bearer dev-secret" \
+  http://127.0.0.1:9079/hello_adapter/hello
+```
+
+Expected adapter result:
+
+```json
+{"ok": true, "message": "hello"}
+```
 
 ## Edit & debug loop
 
@@ -113,51 +336,17 @@ and adapter results with `"ok": false` both make the command fail.
 If dispatch shows `ok: false` with an error that the module adapter is
 configured but not installed, you likely installed it into a different Python
 environment than the one running Aphrodite. Run `aphrodite modules` to compare
-configured, discovered, active, missing, and available adapters.
+configured, discovered, active, missing, available, quarantined, and untrusted
+adapters.
 
-To wire an adapter by hand:
+Third-party packages and private-overlay adapters register through the
+`aphrodite.adapters` group. Aphrodite's public tree never imports them directly,
+which keeps the `NO_CORE_POLICY` / private-overlay fresh-clone rule intact. The
+native trio (`image_gen`, `skillopt`, and `acp_relay`) is registered exactly
+this way in Aphrodite's own `pyproject.toml`.
 
-1. Implement a dispatch handler in your module:
-
-```python
-def handle(action: str, payload: list[str], context: dict[str, Any]) -> dict[str, Any]:
-    ...
-```
-
-2. Declare an entry point in your package's `pyproject.toml` so Aphrodite can
-   discover it. The entry-point group is `aphrodite.adapters`; the entry-point
-   name is the system name used in `APHRODITE_MODULES`, and the value points to
-   the handler:
-
-```toml
-[project.entry-points."aphrodite.adapters"]
-my_adapter = "your_pkg.your_module:handle"
-```
-
-3. Reinstall the package so Python refreshes the entry-point metadata, using the
-   interpreter that runs Aphrodite:
-
-```bash
-~/.local/share/aphrodite/venv/bin/python -m pip install -e .
-```
-
-4. Add the adapter name with `APHRODITE_MODULES=+my_adapter` when it should be
-   active. The leading + appends to the built-in modules; a bare list replaces
-   them — use bare only to intentionally reduce the set. A configured name with
-   no discovered adapter falls back to Aphrodite's placeholder handler instead
-   of crashing.
-
-Return dictionaries with stable fields. Prefer `ok: true` or `ok: false` plus
-an `error` string for failures.
-
-Third-party packages and private-overlay adapters register the same way: they
-ship their own entry points in the `aphrodite.adapters` group. Aphrodite's
-public tree never imports them directly, which keeps the `NO_CORE_POLICY` /
-private-overlay fresh-clone rule intact. The native trio (`image_gen`,
-`skillopt`, and `acp_relay`) is registered exactly this way in Aphrodite's own
-`pyproject.toml`.
-
-Keep adapter boundaries narrow: Aphrodite should call public plugin/runtime APIs and should not patch the external runtime core.
+Keep adapter boundaries narrow: Aphrodite should call public plugin/runtime APIs
+and should not patch the external runtime core.
 
 ## Image generation auth
 
@@ -189,8 +378,8 @@ not authenticate the OpenAI/Codex client.
 
 Public surfaces:
 
-- `handle(action, payload, context)` for `DispatchRouter` registration. Actions `health`, `readiness`, and `status` report relay readiness. Other actions currently return a handled-false response that points callers to the `/acp` HTTP routes.
-- `router = APIRouter(prefix="/acp", tags=["acp_relay"])`, included by `create_app()`, with conversation and turn endpoints. `/acp/*` requires a bearer token only when `APHRODITE_ACP_AUTH_TOKEN` is set.
+- `handle(action, payload, context)` for `DispatchRouter` registration. Actions `health`, `readiness`, and `status` report relay readiness. Other actions currently return a handled-false response that points callers to the relay HTTP routes.
+- a contributed FastAPI router mounted by the adapter route seam under its system path, with relay conversation and turn endpoints protected by the relay's own optional bearer token when `APHRODITE_ACP_AUTH_TOKEN` is set.
 - `AcpRelay`, `ConversationStore`, and configuration helpers used by the HTTP router and tests.
 
 Runtime behavior:
