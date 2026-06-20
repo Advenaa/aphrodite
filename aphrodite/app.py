@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import hmac
 import json
 import os
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
@@ -14,7 +15,7 @@ from .discord.intake import handle_interaction_payload
 from .discord.signature import verify_discord_signature
 from .router import DispatchRouter
 from .readiness import http_runtime_observability, mcp_readiness, production_endpoint_preflight, service_readiness
-from .modules import discover_adapters
+from .modules import discover_adapter_specs, discover_adapters
 from .modules.acp_relay import router as acp_relay_router
 
 
@@ -47,6 +48,17 @@ def _placeholder_handler(system: str):
         }
 
     return handle
+
+
+def _require_adapter_auth(authorization: str | None = Header(default=None)):
+    token = os.environ.get("APHRODITE_ADAPTER_AUTH_TOKEN", "").strip()
+    if not token:
+        raise HTTPException(
+            status_code=503,
+            detail="adapter auth required but APHRODITE_ADAPTER_AUTH_TOKEN is not configured",
+        )
+    if not authorization or not hmac.compare_digest(authorization, f"Bearer {token}"):
+        raise HTTPException(status_code=401, detail="invalid or missing adapter bearer token")
 
 
 def create_app():
@@ -210,6 +222,19 @@ def create_app():
         if not isinstance(payload, dict):
             raise HTTPException(status_code=400, detail="Invalid JSON payload")
         return handle_interaction_payload(payload, router)
+
+    specs, adapter_errors = discover_adapter_specs()
+    quarantined: dict[str, Any] = {}
+    for system, spec in specs.items():
+        if spec.router is None:
+            continue
+        try:
+            deps = [Depends(_require_adapter_auth)] if spec.requires_auth else None
+            app.include_router(spec.router, prefix=f"/{system}", dependencies=deps)
+        except Exception as exc:  # mount-time quarantine: one bad adapter must not crash create_app
+            quarantined[system] = {"name": system, "phase": "mount", "error": repr(exc)}
+    app.state.adapter_errors = adapter_errors
+    app.state.adapter_quarantine = quarantined
 
     app.include_router(acp_relay_router)
     return app
