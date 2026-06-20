@@ -28,6 +28,7 @@ Grow aphrodite as an **extensible adapter platform** that outsiders can build ap
 - No new TODO/FIXME/XXX/HACK; no skipped or xfail'd tests added.
 - Diff scoped to the stated task only; no unrelated churn; no new dependency added without a stated reason in the PR body.
 - Any README/doc reference touched still resolves.
+- Any user-facing or behavioural change adds a `CHANGELOG.md` `[Unreleased]` entry (Added/Changed/Fixed/Security); the `__version__` bump happens at release/tag time, not per-PR.
 
 # Escalate to human (green = correct)
 - Any change to Discord signature/intake, `acp_relay`, `update.py`/`install.sh`, or the `pyproject.toml` packaging/entry-point surface.
