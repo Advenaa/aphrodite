@@ -18,6 +18,21 @@ class AphroditeConfig:
     warnings: tuple[str, ...] = ()
 
 
+def adapter_env(name: str) -> dict[str, str]:
+    """Return an adapter's namespaced environment as a plain config dict.
+
+    Every ``APHRODITE_<NAME>_<KEY>`` variable is surfaced as ``{<key_lower>: value}``
+    so an adapter can read its own configuration without colliding with Aphrodite's
+    own settings. Example: ``APHRODITE_WEATHER_API_KEY=x`` -> ``{"api_key": "x"}``.
+    """
+    prefix = f"APHRODITE_{name.upper()}_"
+    return {
+        key.removeprefix(prefix).lower(): value
+        for key, value in os.environ.items()
+        if key.startswith(prefix)
+    }
+
+
 def load_config() -> AphroditeConfig:
     port_raw = os.environ.get("APHRODITE_PORT", "9079")
     warnings: list[str] = []
