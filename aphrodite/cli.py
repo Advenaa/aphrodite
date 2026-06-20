@@ -11,7 +11,7 @@ from .config import load_config
 from .inventory import modules_payload
 from .readiness import production_endpoint_preflight
 from .scaffold import scaffold_module
-from .serve import run_server
+from .serve import run_adapter_dev, run_server
 from .update import maybe_notify_update, update_payload, version_payload
 
 
@@ -63,6 +63,15 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--host", default=None)
     serve.add_argument("--port", type=int, default=None)
     serve.add_argument("--reload", action="store_true")
+    run = sub.add_parser(
+        "run",
+        help="Run Aphrodite with a local adapter package",
+        description="Run Aphrodite with a local adapter package on sys.path and uvicorn reload enabled.",
+        parents=[common],
+    )
+    run.add_argument("--adapter", required=True)
+    run.add_argument("--host", default=None)
+    run.add_argument("--port", type=int, default=None)
     sub.add_parser(
         "modules",
         help="List configured and discovered module adapters",
@@ -105,6 +114,16 @@ def main(argv: list[str] | None = None) -> int:
         port = args.port or cfg.port
         print(f"Starting Aphrodite on http://{host}:{port} (Ctrl-C to stop)")
         run_server(host, port, args.reload)
+        return 0
+    if args.command == "run":
+        cfg = load_config()
+        host = args.host or cfg.host
+        port = args.port or cfg.port
+        print(
+            f"Starting Aphrodite on http://{host}:{port} "
+            f"with adapter {args.adapter} (Ctrl-C to stop)"
+        )
+        run_adapter_dev(args.adapter, host, port)
         return 0
     if args.command == "modules":
         payload = modules_payload()
