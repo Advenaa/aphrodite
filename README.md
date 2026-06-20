@@ -248,20 +248,20 @@ See [`docs/configuration.md`](docs/configuration.md) for the full list.
 
 ## Documentation
 
-| If you want to… | Read | Audience |
+| If you want to… | Read | Best for |
 | --- | --- | --- |
-| configure host, port, modules, CORS, Discord, or ACP auth | [Configuration](docs/configuration.md) | operator |
-| deploy on a host with systemd and a reverse proxy | [Deployment](docs/deployment.md) | operator |
-| run the sidecar in Docker or Compose | [Container deployment](docs/deployment-docker.md) | operator |
-| understand signed Discord interaction intake | [Discord interactions](docs/discord-interactions.md) | operator, contributor |
-| write or troubleshoot a module adapter | [Module adapters](docs/module-adapters.md) | author |
-| use the ACP conversation relay | [ACP relay](docs/acp-relay.md) | operator, author |
-| keep private deployment material out of the public repo | [Private overlay](docs/private-overlay.md) | operator, contributor |
-| interpret live service staleness reports | [Live service staleness](docs/live-service-staleness.md) | operator |
-| preflight the public Discord endpoint before cutover | [Production endpoint preflight](docs/production-endpoint-preflight.md) | operator |
-| observe a running service after approved activation | [Service runtime observability](docs/service-runtime-observability.md) | operator |
-| maintain negative signed-interaction fixtures | [Signed interaction negative fixtures](docs/signed-interaction-negative-fixtures.md) | contributor |
-| see release history | [Changelog](CHANGELOG.md) | operator, contributor |
+| configure host, port, modules, CORS, Discord, or ACP auth | [Configuration](docs/configuration.md) | setting up Aphrodite |
+| deploy on a host with systemd and a reverse proxy | [Deployment](docs/deployment.md) | server deployment |
+| run the sidecar in Docker or Compose | [Container deployment](docs/deployment-docker.md) | Docker deployment |
+| understand signed Discord interaction intake | [Discord interactions](docs/discord-interactions.md) | Discord setup and maintainers |
+| write or troubleshoot a module adapter | [Module adapters](docs/module-adapters.md) | module builders |
+| use the ACP conversation relay | [ACP relay](docs/acp-relay.md) | chat/agent integrations |
+| keep private deployment material out of the public repo | [Private overlay](docs/private-overlay.md) | repo maintainers |
+| interpret live service staleness reports | [Live service staleness](docs/live-service-staleness.md) | service health checks |
+| preflight the public Discord endpoint before cutover | [Production endpoint preflight](docs/production-endpoint-preflight.md) | launch checklist |
+| observe a running service after approved activation | [Service runtime observability](docs/service-runtime-observability.md) | post-launch checks |
+| maintain negative signed-interaction fixtures | [Signed interaction negative fixtures](docs/signed-interaction-negative-fixtures.md) | test maintainers |
+| see release history | [Changelog](CHANGELOG.md) | release notes |
 
 ## Deployment
 
