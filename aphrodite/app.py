@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from . import __version__
-from .config import load_config
+from .config import AphroditeConfig, load_config
 from .discord.intake import handle_interaction_payload
 from .discord.signature import verify_discord_signature
 from .router import DispatchRouter
@@ -21,8 +21,8 @@ from .modules import discover_adapter_specs, discover_adapters
 from .modules.acp_relay import router as acp_relay_router
 
 
-def health_payload() -> dict[str, Any]:
-    cfg = load_config()
+def health_payload(cfg: AphroditeConfig | None = None) -> dict[str, Any]:
+    cfg = cfg if cfg is not None else load_config()
     return {
         "ok": True,
         "service": "aphrodite",
@@ -32,10 +32,10 @@ def health_payload() -> dict[str, Any]:
     }
 
 
-def build_router() -> DispatchRouter:
+def build_router(modules: tuple[str, ...] | None = None) -> DispatchRouter:
     router = DispatchRouter()
     adapters = discover_adapters()
-    for system in load_config().modules:
+    for system in (modules if modules is not None else load_config().modules):
         handler = adapters.get(system)
         router.register(system, handler if handler is not None else _placeholder_handler(system))
     return router
@@ -86,10 +86,10 @@ def _build_adapter_lifespan(specs):
     return _lifespan
 
 
-def create_app():
+def create_app(config: AphroditeConfig | None = None, *, root_path: str | None = None):
     specs, adapter_errors = discover_adapter_specs()
-    app = FastAPI(title="Aphrodite", version=__version__, lifespan=_build_adapter_lifespan(specs))
-    cfg = load_config()
+    app = FastAPI(title="Aphrodite", version=__version__, lifespan=_build_adapter_lifespan(specs), root_path=root_path or "")
+    cfg = config if config is not None else load_config()
     if cfg.cors_origins:
         if "*" in cfg.cors_origins:
             allow_origins = ["*"]
@@ -104,15 +104,15 @@ def create_app():
             allow_methods=["*"],
             allow_headers=["*"],
         )
-    router = build_router()
+    router = build_router(cfg.modules)
 
     @app.get("/health")
     def health():
-        return health_payload()
+        return health_payload(cfg)
 
     @app.get("/status")
     def status():
-        data = health_payload()
+        data = health_payload(cfg)
         data["registered_systems"] = router.systems
         data["mcp"] = mcp_readiness()
         data["service_readiness"] = service_readiness()
