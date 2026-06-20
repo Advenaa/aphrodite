@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-Handler = Callable[[str, list[str], dict[str, Any]], dict[str, Any]]
+from .modules import Handler
+
 _SUPPORTED_VERSIONS = {"v1"}
 
 
