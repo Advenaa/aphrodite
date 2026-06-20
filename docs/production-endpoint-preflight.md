@@ -1,6 +1,6 @@
 # Aphrodite production endpoint preflight
 
-Purpose: prepare a non-live checker for the public Discord Interaction Endpoint URL before any approved cutover. This pack validates disk/env shape and prints operator checks only. It does not call Discord, does not change Discord endpoint configuration, does not reload Caddy, and does not start/restart/reload Hermes, Forge, or Aphrodite.
+Purpose: prepare a non-live checker for the public Discord Interaction Endpoint URL before any approved cutover. This pack validates disk/env shape and prints operator checks only. It does not call Discord, does not change Discord endpoint configuration, does not reload Caddy, and does not start/restart/reload Hermes, the agent runtime, or Aphrodite.
 
 ## Non-live checker
 
@@ -53,7 +53,7 @@ curl -i -X POST https://<approved-host>/discord/interactions \
   -d '{}'
 ```
 
-Expected result: `401 Invalid Discord interaction signature`, or `503 Discord public key is not configured` before env is installed. It must never return a successful Nudge/Kanban action.
+Expected result: `401 Invalid Discord interaction signature`, or `503 Discord public key is not configured` before env is installed. It must never return a successful private workflow action.
 
 ## Activation boundary
 

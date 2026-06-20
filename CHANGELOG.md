@@ -20,10 +20,12 @@ All notable changes to this project will be documented in this file. The format 
 - Daily "update available" notification (opt out via `APHRODITE_NO_UPDATE_NOTIFIER=1`).
 - One-line `install.sh` installer/updater.
 - `doctor` reports whether a newer version is available.
+- `aphrodite easysetup` prints paste-ready Hermes setup and MCP registration guidance.
 
 ### Changed
 
 - Adapter `handle()` responses standardized on the `{"ok": ...}` dialect; the legacy `handled` key was dropped (breaking for adapters that read `handled`).
+- Public docs and defaults now use generic operator/profile wording instead of private deployment names; `APHRODITE_ACP_PROFILE` defaults to `default`.
 
 ### Fixed
 
@@ -34,3 +36,4 @@ All notable changes to this project will be documented in this file. The format 
 - Mounted adapter routers require bearer-token auth by default (`APHRODITE_ADAPTER_AUTH_TOKEN`).
 - `APHRODITE_TRUSTED_ADAPTERS` allowlist plus mount-time quarantine, so a failing adapter cannot crash startup.
 - Adapter trust model documented in `SECURITY.md`.
+- Operator-private ledgers and deployment identifiers were removed from the public tree; keep local runbooks under the gitignored `.local/` overlay.

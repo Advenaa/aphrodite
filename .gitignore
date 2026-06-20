@@ -25,6 +25,8 @@ config/*.env
 
 # Private local overlay: relocated operator suite, runbooks, real IDs/paths.
 .local/
+GOAL.md
+PROGRESS.md
 
 # Vendored third-party ACP client reference clone (not for publication).
 _acp_ref/

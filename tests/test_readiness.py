@@ -153,7 +153,7 @@ def _stub_doctor_dependencies(monkeypatch) -> None:
     monkeypatch.setattr("aphrodite.doctor.service_readiness", lambda root: {"ok": True})
     monkeypatch.setattr("aphrodite.doctor.http_runtime_observability", lambda: {"ok": True})
     monkeypatch.setattr("aphrodite.doctor.production_endpoint_preflight", lambda root: {"ok": True})
-    monkeypatch.setattr("aphrodite.doctor.latest_version_nudge", lambda: {"checked": False})
+    monkeypatch.setattr("aphrodite.doctor.latest_version_notice", lambda: {"checked": False})
 
 
 def test_doctor_ok_true_on_installed_layout_without_repo_artifacts(monkeypatch, tmp_path):

@@ -61,7 +61,7 @@ class FakeTransport:
 
 def _relay(tmp_path: Path, transport=None) -> AcpRelay:
     cfg = RelayConfig(
-        profile="forge",
+        profile="default",
         hermes_bin="hermes",
         cwd=str(tmp_path),
         db_path=str(tmp_path / "acp.sqlite3"),
@@ -70,14 +70,14 @@ def _relay(tmp_path: Path, transport=None) -> AcpRelay:
 
 
 def test_command_uses_profile_and_acp_subcommand():
-    cfg = RelayConfig(profile="forge", hermes_bin="hermes")
+    cfg = RelayConfig(profile="default", hermes_bin="hermes")
     binary, args = cfg.command()
     assert binary == "hermes"
     # ACP ignores -m/--provider; explicit overrides switch via set_session_model.
-    assert args == ["-p", "forge", "acp"]
+    assert args == ["-p", "default", "acp"]
     assert cfg.model_choice_id() is None
     explicit = RelayConfig(
-        profile="forge",
+        profile="default",
         model="openai/gpt-4o-mini",
         provider="openrouter",
         hermes_bin="hermes",
@@ -98,7 +98,7 @@ def test_load_relay_config_parses_turn_timeout_env(monkeypatch):
 def test_model_choice_id_requires_both_provider_and_model():
     assert (
         RelayConfig(
-            profile="forge",
+            profile="default",
             provider="openrouter",
             model="",
         ).model_choice_id()
@@ -106,7 +106,7 @@ def test_model_choice_id_requires_both_provider_and_model():
     )
     assert (
         RelayConfig(
-            profile="forge",
+            profile="default",
             provider="",
             model="openai/gpt-4o-mini",
         ).model_choice_id()
@@ -114,7 +114,7 @@ def test_model_choice_id_requires_both_provider_and_model():
     )
     assert (
         RelayConfig(
-            profile="forge",
+            profile="default",
             provider="",
             model="",
         ).model_choice_id()
@@ -122,7 +122,7 @@ def test_model_choice_id_requires_both_provider_and_model():
     )
     assert (
         RelayConfig(
-            profile="forge",
+            profile="default",
             provider="openrouter",
             model="openai/gpt-4o-mini",
         ).model_choice_id()
@@ -222,10 +222,10 @@ def test_first_turn_creates_session_and_records(tmp_path):
     assert convo["acp_session_id"] is None
     assert convo["turns"] == 0
 
-    out = asyncio.run(relay.turn(cid, "hello forge"))
+    out = asyncio.run(relay.turn(cid, "hello default profile"))
     assert out["turn"] == 1
     assert out["acp_session_id"] == "S1"
-    assert "hello forge" in out["reply"]
+    assert "hello default profile" in out["reply"]
     # The first transport call must request a NEW session (acp_session_id None).
     assert fake.calls[0]["acp_session_id"] is None
 
@@ -233,7 +233,7 @@ def test_first_turn_creates_session_and_records(tmp_path):
     assert stored["acp_session_id"] == "S1"
     assert stored["turns"] == 1
     assert [m["role"] for m in stored["messages"]] == ["user", "agent"]
-    assert stored["messages"][0]["text"] == "hello forge"
+    assert stored["messages"][0]["text"] == "hello default profile"
 
 
 def test_second_turn_resumes_same_session(tmp_path):
@@ -426,7 +426,7 @@ def test_http_routes_drive_a_conversation(tmp_path):
             health = client.get("/acp/health")
             assert health.status_code == 200
 
-            created = client.post("/acp/conversations", json={"title": "omp<->forge"})
+            created = client.post("/acp/conversations", json={"title": "omp<->default"})
             assert created.status_code == 200
             cid = created.json()["id"]
 
@@ -547,16 +547,16 @@ def test_build_router_registers_acp_relay_and_dispatches_read_only_actions(tmp_p
 
 
 # --------------------------------------------------------------------------- #
-# Live end-to-end against the real Hermes forge ACP server.
+# Live end-to-end against the real Hermes default ACP server.
 # Gated behind APHRODITE_ACP_E2E=1 so it only runs where Hermes is reachable.
 # --------------------------------------------------------------------------- #
 
 
 @pytest.mark.skipif(
     os.environ.get("APHRODITE_ACP_E2E") != "1",
-    reason="requires a live Hermes forge ACP server; set APHRODITE_ACP_E2E=1",
+    reason="requires a live Hermes default ACP server; set APHRODITE_ACP_E2E=1",
 )
-def test_e2e_live_forge_maintains_context(tmp_path):
+def test_e2e_live_default_profile_maintains_context(tmp_path):
     from aphrodite.modules.acp_relay import AcpRelay, load_relay_config
 
     relay = AcpRelay(load_relay_config(db_path=str(tmp_path / "e2e.sqlite3")))
@@ -593,7 +593,7 @@ def test_e2e_live_forge_maintains_context(tmp_path):
 
 def _cfg(tmp_path: Path, **kw) -> RelayConfig:
     base = dict(
-        profile="forge",
+        profile="default",
         hermes_bin="hermes",
         cwd=str(tmp_path),
         db_path=str(tmp_path / "relay.sqlite3"),
@@ -854,7 +854,7 @@ def test_create_profile_allowlist_403(tmp_path, monkeypatch):
     configure_relay(_relay(tmp_path))
     try:
         with TestClient(create_app()) as client:
-            denied = client.post("/acp/conversations", json={"profile": "forge"})
+            denied = client.post("/acp/conversations", json={"profile": "default"})
             assert denied.status_code == 403
             allowed = client.post("/acp/conversations", json={"profile": "alpha"})
             assert allowed.status_code == 200
@@ -867,7 +867,7 @@ def test_create_profile_allowlist_gates_default_profile(tmp_path, monkeypatch):
 
     from aphrodite.app import create_app
 
-    # Default profile is "forge"; an allowlist that omits it must reject a
+    # Default profile is "default"; an allowlist that omits it must reject a
     # profile-less POST that would otherwise fall back to the default profile.
     monkeypatch.setenv("APHRODITE_ACP_ALLOWED_PROFILES", "alpha,beta")
     monkeypatch.delenv("APHRODITE_ACP_PROFILE", raising=False)

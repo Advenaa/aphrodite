@@ -75,7 +75,7 @@ when you are done.
 - **Optional MCP server** (`aphrodite/mcp_server.py`) exposing SkillOpt tools
   plus discovered adapter inventory and dispatch over stdio.
 
-If you see references to `nudge`/`readsurface`/`soulglass`/`kanban`/`nixie`, those are operator-private adapters; public users do not need them — unknown configured names become harmless placeholders (see `aphrodite modules`).
+Private module adapters should stay outside the public tree. If a configured adapter is not installed, Aphrodite registers a harmless placeholder instead of breaking startup (see `aphrodite modules`).
 
 ## Extending Aphrodite
 

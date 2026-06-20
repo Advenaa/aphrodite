@@ -15,7 +15,7 @@ def _stub_doctor_dependencies(monkeypatch):
     return doctor
 
 
-def test_doctor_ok_unaffected_when_nudge_offline(monkeypatch, tmp_path):
+def test_doctor_ok_unaffected_when_notice_offline(monkeypatch, tmp_path):
     import aphrodite.update as update
 
     doctor = _stub_doctor_dependencies(monkeypatch)
@@ -30,7 +30,7 @@ def test_doctor_ok_unaffected_when_nudge_offline(monkeypatch, tmp_path):
     assert payload["latest_version"]["latest"] is None
 
 
-def test_doctor_nudge_reports_available_without_changing_ok(monkeypatch, tmp_path):
+def test_doctor_notice_reports_available_without_changing_ok(monkeypatch, tmp_path):
     import aphrodite.update as update
 
     doctor = _stub_doctor_dependencies(monkeypatch)
@@ -45,7 +45,7 @@ def test_doctor_nudge_reports_available_without_changing_ok(monkeypatch, tmp_pat
     assert payload["latest_version"]["update_available"] is True
 
 
-def test_latest_version_nudge_reuses_fresh_cache(monkeypatch, tmp_path):
+def test_latest_version_notice_reuses_fresh_cache(monkeypatch, tmp_path):
     import aphrodite.update as update
 
     calls = {"count": 0}
@@ -57,8 +57,8 @@ def test_latest_version_nudge_reuses_fresh_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(update, "_cache_path", lambda: tmp_path / "update-check.json")
     monkeypatch.setattr(update, "_latest_version", fake_latest)
 
-    first = update.latest_version_nudge()
-    second = update.latest_version_nudge()
+    first = update.latest_version_notice()
+    second = update.latest_version_notice()
 
     assert calls["count"] == 1
     assert first["latest"] == "9.9.9"

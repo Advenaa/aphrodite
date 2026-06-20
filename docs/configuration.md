@@ -67,7 +67,7 @@ OpenAI client>)` programmatically.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `APHRODITE_ACP_PROFILE` | `forge` | Hermes profile used when spawning `hermes -p <profile> acp`. |
+| `APHRODITE_ACP_PROFILE` | `default` | Hermes profile used when spawning `hermes -p <profile> acp`. |
 | `APHRODITE_ACP_MODEL` | (unset) | Optional model override; only used with `APHRODITE_ACP_PROVIDER`. When unset, the relay uses the Hermes profile's configured engine. |
 | `APHRODITE_ACP_PROVIDER` | (unset) | Optional provider override; only used with `APHRODITE_ACP_MODEL`. When unset, the relay uses the Hermes profile's configured engine. |
 | `APHRODITE_ACP_HERMES_BIN` | discovered `hermes` executable | Binary used to spawn the external ACP runtime. |
@@ -80,7 +80,7 @@ OpenAI client>)` programmatically.
 | `APHRODITE_ACP_AUTO_APPROVE` | `true` | Auto-approves ACP permission prompts and sets `HERMES_YOLO_MODE=1` for the subprocess unless already set. Set false to deny permission prompts. |
 | `APHRODITE_ACP_ACCEPT_HOOKS` | `true` | Sets `HERMES_ACCEPT_HOOKS=1` for the subprocess unless already set. Set false to avoid accepting Hermes hooks automatically. |
 
-The ACP transport sets `HERMES_YOLO_MODE=1` and `HERMES_ACCEPT_HOOKS=1` in the subprocess environment only while `APHRODITE_ACP_AUTO_APPROVE` and `APHRODITE_ACP_ACCEPT_HOOKS` are true. Both default to true so existing headless forge flows keep running.
+The ACP transport sets `HERMES_YOLO_MODE=1` and `HERMES_ACCEPT_HOOKS=1` in the subprocess environment only while `APHRODITE_ACP_AUTO_APPROVE` and `APHRODITE_ACP_ACCEPT_HOOKS` are true. Both default to true so existing headless agent runtime flows keep running.
 
 All `/acp/*` routes require `Authorization: Bearer <token>` only when `APHRODITE_ACP_AUTH_TOKEN` is set. With the default unset token, the routes are open for local deployments.
 

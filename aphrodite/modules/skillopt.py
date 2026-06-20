@@ -493,7 +493,7 @@ def _train_run_impl(payload: dict[str, Any]) -> dict[str, Any]:
 _FORBIDDEN_POLICY_PATTERNS = {
     "silent_skill_mutation": re.compile(r"\b(silently|automatically)\s+(overwrite|replace|mutate)\b.*\b(skill|SKILL\.md)\b", re.I | re.S),
     "casual_gateway_restart": re.compile(r"\b(restart|reload)\b.*\b(gateway|hermes gateway)\b.*\b(without approval|automatically|always)\b", re.I | re.S),
-    "forge_domain_policy": re.compile(r"\bForge\b.*\b(decide|own|set)\b.*\b(pricing|positioning|personal routine|market thesis)\b", re.I | re.S),
+    "operator_domain_policy": re.compile(r"\b(operator|deployment|workspace)\b.*\b(decide|own|set)\b.*\b(pricing|positioning|personal routine|market thesis)\b", re.I | re.S),
 }
 
 

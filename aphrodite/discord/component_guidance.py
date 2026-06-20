@@ -12,7 +12,7 @@ def private_failure_guidance(content: str, result: dict[str, Any]) -> tuple[str,
     """Return operator-facing private guidance plus annotated Aphrodite result.
 
     This helper is intentionally pure/read-only. It does not call Discord, touch
-    Kanban/Nudge state, start services, edit config, or manage cron. It only
+    private workflow state, start services, edit config, or manage cron. It only
     normalizes stale/malformed/unknown component failures into consistent private
     UX so old buttons fail closed without looking like a public action succeeded.
     """

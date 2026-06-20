@@ -6,7 +6,7 @@ from typing import Any
 
 from .config import DEFAULT_MODULES, load_config
 from .readiness import http_runtime_observability, mcp_readiness, production_endpoint_preflight, service_readiness
-from .update import latest_version_nudge
+from .update import latest_version_notice
 from .modules import discover_adapter_specs
 
 REQUIRED_MODULE_FILES = [
@@ -64,7 +64,7 @@ def doctor_payload(root: Path | str | None = None) -> dict[str, Any]:
         "service_readiness": service_readiness(root_path),
         "http_observability": http_runtime_observability(),
         "production_endpoint_preflight": production_endpoint_preflight(root_path),
-        "latest_version": latest_version_nudge(),
+        "latest_version": latest_version_notice(),
     }
     payload["adapters"] = _adapter_lint()
     payload["dependencies"] = _dependency_health()

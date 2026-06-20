@@ -7,7 +7,7 @@ from pathlib import Path
 def hermes_root() -> Path:
     """Return the canonical Hermes root, collapsing named profile homes.
 
-    Aphrodite runs as a sidecar and often under the Forge profile environment,
+    Aphrodite runs as a sidecar and often under a named profile environment,
     while local plugins live under the shared Hermes root. If HERMES_HOME points
     at `<root>/profiles/<name>`, use `<root>` for plugin discovery.
     """

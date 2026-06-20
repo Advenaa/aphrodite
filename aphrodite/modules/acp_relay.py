@@ -1,6 +1,6 @@
 """Aphrodite ACP relay module.
 
-Bridges an external HTTP caller to a Hermes profile (default ``forge``) over the
+Bridges an external HTTP caller to a Hermes profile (default ``default``) over the
 Agent Client Protocol (ACP), so a caller can hold a **maintained-session,
 multi-turn** conversation with the agent. Each HTTP turn is incremental: the
 caller sends only the new message and the agent recalls prior turns, because the
@@ -43,7 +43,7 @@ from ..paths import hermes_root
 # Configuration
 # --------------------------------------------------------------------------- #
 
-DEFAULT_PROFILE = "forge"
+DEFAULT_PROFILE = "default"
 DEFAULT_MODEL = ""
 DEFAULT_PROVIDER = ""
 DEFAULT_TURN_TIMEOUT = 240.0
@@ -267,9 +267,9 @@ async def acp_transport(
     binary, args = config.command()
     env = dict(os.environ)
     # Non-interactive by default: avoid blocking on approvals/hooks. Both gates
-    # default ON (keeps the verified forge flow working); set the corresponding
-    # env var to 0 to opt out. Opt-out MUST strip any value inherited from the
-    # parent env, or a YOLO/accept-hooks setting there would defeat the gate.
+    # default ON for unattended relay operation; set the corresponding env var
+    # to 0 to opt out. Opt-out MUST strip any value inherited from the parent
+    # env, or a YOLO/accept-hooks setting there would defeat the gate.
     if auto_approve:
         env.setdefault("HERMES_YOLO_MODE", "1")
     else:

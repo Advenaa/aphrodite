@@ -113,11 +113,11 @@ def update_payload(check: bool = False) -> dict[str, Any]:
     }
 
 
-def latest_version_nudge() -> dict[str, Any]:
+def latest_version_notice() -> dict[str, Any]:
     try:
         cache = _read_cache()
         if _cache_is_fresh(cache):
-            return _nudge_payload(cache, reason=None)
+            return _notice_payload(cache, reason=None)
 
         latest = _latest_version()
         if latest is None:
@@ -132,7 +132,7 @@ def latest_version_nudge() -> dict[str, Any]:
 
         cache = {"latest": latest, "cached_at": _iso_now(), "cached_at_epoch": time.time()}
         _write_cache(cache)
-        return _nudge_payload(cache, reason=None)
+        return _notice_payload(cache, reason=None)
     except Exception:
         return {
             "checked": False,
@@ -239,7 +239,7 @@ def _cache_is_fresh(cache: dict[str, Any] | None) -> bool:
         return False
 
 
-def _nudge_payload(cache: dict[str, Any] | None, reason: str | None) -> dict[str, Any]:
+def _notice_payload(cache: dict[str, Any] | None, reason: str | None) -> dict[str, Any]:
     latest_value = cache.get("latest") or cache.get("latest_version") if cache else None
     latest = str(latest_value) if latest_value is not None else None
     cached_at_value = cache.get("cached_at") if cache else None

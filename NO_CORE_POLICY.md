@@ -7,7 +7,7 @@ Hard boundary:
 - Do not edit Hermes core to make Aphrodite work.
 - Do not require custom Hermes gateway hooks.
 - Do not mount routes by modifying Hermes dashboard/server code.
-- Do not make Hermes core aware of Nudge, Readsurface, Soulglass, Kanban, or Aphrodite product logic.
+- Do not make Hermes core aware of private adapters, private workflow actions, or Aphrodite product logic.
 
 Allowed integration surfaces:
 

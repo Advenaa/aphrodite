@@ -54,13 +54,13 @@ The subprocess environment sets these defaults only when the matching relay togg
 - `HERMES_YOLO_MODE=1` when `APHRODITE_ACP_AUTO_APPROVE` is true.
 - `HERMES_ACCEPT_HOOKS=1` when `APHRODITE_ACP_ACCEPT_HOOKS` is true.
 
-Both relay toggles default to true, so the existing headless forge flow does not block on prompts. If `APHRODITE_ACP_AUTO_APPROVE` is false, ACP permission requests are denied instead of auto-approved and `HERMES_YOLO_MODE` is not injected. If `APHRODITE_ACP_ACCEPT_HOOKS` is false, `HERMES_ACCEPT_HOOKS` is not injected.
+Both relay toggles default to true, so an existing headless agent runtime flow does not block on prompts. If `APHRODITE_ACP_AUTO_APPROVE` is false, ACP permission requests are denied instead of auto-approved and `HERMES_YOLO_MODE` is not injected. If `APHRODITE_ACP_ACCEPT_HOOKS` is false, `HERMES_ACCEPT_HOOKS` is not injected.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `APHRODITE_ACP_PROFILE` | `forge` | Profile passed to `hermes -p <profile> acp`. |
+| `APHRODITE_ACP_PROFILE` | `default` | Profile passed to `hermes -p <profile> acp`. |
 | `APHRODITE_ACP_MODEL` | (unset) | Optional model override; only used with `APHRODITE_ACP_PROVIDER`. When unset, the relay uses the Hermes profile's own current model. |
 | `APHRODITE_ACP_PROVIDER` | (unset) | Optional provider override; only used with `APHRODITE_ACP_MODEL`. When unset, the relay uses the Hermes profile's own current model. |
 | `APHRODITE_ACP_HERMES_BIN` | discovered `hermes` binary | Explicit executable path or command name for the external runtime. |

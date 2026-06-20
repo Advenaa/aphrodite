@@ -67,7 +67,7 @@ def preflight_payload(root: Path | str | None = None, production: bool = False) 
     if not _env_value(root_env, "APHRODITE_DISCORD_ALLOWED_USER_IDS") and not _env_value(
         root_env, "APHRODITE_DISCORD_ALLOWED_ROLE_IDS"
     ):
-        warnings.append("No Aphrodite Discord allowlist env configured; Kanban approve/deny will stay unauthorized")
+        warnings.append("No Aphrodite Discord allowlist env configured; private workflow actions will stay unauthorized")
 
     blocking = list(dict.fromkeys(blocking))
     python_executable = Path(sys.executable).resolve()
